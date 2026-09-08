@@ -220,6 +220,10 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
         return UserDefaults.standard.bool(forKey: SelectionAssistantSettings.Keys.floatingIconEnabled)
     }
 
+    private var isHotKeysEnabled: Bool {
+        SelectionAssistantSettings.hotKeysModeEnabled()
+    }
+
     private func configurePrimaryInteractionMode() {
         cancelScheduledFloatingPanelsHide()
         isHelperHovered = false
@@ -244,35 +248,33 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
         }
         cancelPrimaryInteractionRetry()
 
-        let automatic = SelectionAssistantSettings.activationMode() == .automatic
-        let hasEnabledHotKey = SelectionAssistantSettings.hotKey(for: .rewrite).isEnabled
+        let hasEnabledHotKey = isHotKeysEnabled && (SelectionAssistantSettings.hotKey(for: .rewrite).isEnabled
             || SelectionAssistantSettings.hotKey(for: .translate).isEnabled
-        if (isToolboxEnabled && automatic) || hasEnabledHotKey {
-            selectionAssistant.start(automaticDetectionEnabled: isToolboxEnabled && automatic)
+        )
+        if isToolboxEnabled || hasEnabledHotKey {
+            selectionAssistant.start(automaticDetectionEnabled: isToolboxEnabled)
         } else {
             selectionAssistant.stop()
         }
 
-        if isFloatingIconEnabled && automatic {
+        if isFloatingIconEnabled {
             floatingHelper?.start()
         } else {
             floatingHelper?.stop()
         }
 
-        if !automatic, hasEnabledHotKey {
+        if !isToolboxEnabled, !isFloatingIconEnabled, hasEnabledHotKey {
             helperStatus = "Hotkeys active"
             return
         }
 
-        switch (isToolboxEnabled, isFloatingIconEnabled) {
-        case (true, true):
-            helperStatus = "Toolbox + floating icon active"
-        case (true, false):
-            helperStatus = "Toolbox active"
-        case (false, true):
-            helperStatus = "Floating icon active"
-        case (false, false):
-            helperStatus = "No Textora interface enabled"
+        switch (isToolboxEnabled, isFloatingIconEnabled, hasEnabledHotKey) {
+        case (true, _, true): helperStatus = "Toolbox + hotkeys active"
+        case (true, _, false): helperStatus = "Toolbox active"
+        case (_, true, true): helperStatus = "Floating icon + hotkeys active"
+        case (_, true, false): helperStatus = "Floating icon active"
+        case (false, false, true): helperStatus = "Hotkeys active"
+        case (false, false, false): helperStatus = "No Textora interface enabled"
         }
     }
 
@@ -337,7 +339,7 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
     private var shouldContinueLaunchWarmup: Bool {
         guard hasAnyConfiguredKey() else { return false }
         guard textAccess.hasAccessibilityPermission() else { return true }
-        if isToolboxEnabled || isFloatingIconEnabled {
+        if isToolboxEnabled || isFloatingIconEnabled || isHotKeysEnabled {
             return false
         }
         return launchWarmupCount < 3
@@ -574,9 +576,7 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
         }
         textAccess.setAppConsentStatus(.allowed, for: bundleID)
         consentPrompt.hide()
-        if isToolboxEnabled {
-            selectionAssistant.refreshAfterConsentChange()
-        }
+        selectionAssistant.resolvePendingHotKeyConsent(for: bundleID, allowed: true)
         if isFloatingIconEnabled, let frame = floatingHelper?.currentFrame, !frame.isEmpty {
             showRewritePopupFromFloatingState(frame: frame)
         }
@@ -591,13 +591,14 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
         textAccess.setAppConsentStatus(.denied, for: bundleID)
         rewritePanel.hide()
         consentPrompt.hide()
-        if isToolboxEnabled {
-            selectionAssistant.refreshAfterConsentChange()
-        }
+        selectionAssistant.resolvePendingHotKeyConsent(for: bundleID, allowed: false)
     }
 
     private func handleConsentLater() {
         isConsentPromptHovered = false
+        if let bundleID = consentPrompt.capturedConsentBundleID {
+            selectionAssistant.resolvePendingHotKeyConsent(for: bundleID, allowed: false)
+        }
         consentPrompt.hide()
         if isToolboxEnabled {
             selectionAssistant.suppressConsentPromptBriefly()
@@ -605,7 +606,7 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
     }
 
     private func handleSelectionAssistantConsentRequired(anchor: CGRect, bundleID: String) {
-        guard isToolboxEnabled else { return }
+        guard isToolboxEnabled || isHotKeysEnabled else { return }
         cancelScheduledFloatingPanelsHide()
         rewritePanel.hide()
         floatingHelper?.setKeepBelowWindow(nil)

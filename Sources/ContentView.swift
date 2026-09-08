@@ -107,19 +107,15 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Interface")
                 .font(.headline)
-            Text("Choose how Textora appears. You can enable both; identical AI checks are shared instead of requested twice.")
+            Text("Choose one visual interface, add Hotkeys to it, or use Hotkeys on their own.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             InterfaceModeCards(
-                toolboxEnabled: $viewModel.toolboxEnabled,
-                floatingIconEnabled: $viewModel.floatingIconEnabled,
+                toolboxEnabled: settingsModeBinding(.toolbox),
+                floatingIconEnabled: settingsModeBinding(.floatingIcon),
+                hotKeysEnabled: settingsModeBinding(.hotKeys),
                 compact: true
             )
-            Picker("Show Textora", selection: $viewModel.selectionActivationMode) {
-                Text("Automatically").tag(SelectionActivationMode.automatic)
-                Text("Only with hotkeys").tag(SelectionActivationMode.hotkeyOnly)
-            }
-            .pickerStyle(.segmented)
 
             HStack(spacing: 12) {
                 Picker("Rewrite profile", selection: $viewModel.operation) {
@@ -134,16 +130,31 @@ struct ContentView: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 7) {
-                HotKeySettingRow(title: "Rewrite selected text", hotKey: $viewModel.rewriteHotKey)
-                HotKeySettingRow(title: "Translate selected text", hotKey: $viewModel.translateHotKey)
-            }
-            if let error = GlobalHotKeyManager.shared.registrationError {
-                Text(error)
-                    .font(.caption2)
-                    .foregroundStyle(.red)
+            if viewModel.hotKeysModeEnabled {
+                VStack(alignment: .leading, spacing: 7) {
+                    HotKeySettingRow(title: "Rewrite selected text", hotKey: $viewModel.rewriteHotKey)
+                    HotKeySettingRow(title: "Translate selected text", hotKey: $viewModel.translateHotKey)
+                }
+                if let error = GlobalHotKeyManager.shared.registrationError {
+                    Text(error)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                }
             }
         }
+    }
+
+    private func settingsModeBinding(_ mode: AppViewModel.OnboardingInterfaceMode) -> Binding<Bool> {
+        Binding(
+            get: {
+                switch mode {
+                case .toolbox: return viewModel.toolboxEnabled
+                case .floatingIcon: return viewModel.floatingIconEnabled
+                case .hotKeys: return viewModel.hotKeysModeEnabled
+                }
+            },
+            set: { viewModel.setInterfaceMode(mode, enabled: $0) }
+        )
     }
 
     @ViewBuilder
@@ -333,7 +344,7 @@ private struct HotKeySettingRow: View {
 private struct InterfaceModeCards: View {
     @Binding var toolboxEnabled: Bool
     @Binding var floatingIconEnabled: Bool
-    var hotKeysOnly: Binding<Bool>? = nil
+    var hotKeysEnabled: Binding<Bool>? = nil
     var compact = false
 
     var body: some View {
@@ -354,11 +365,11 @@ private struct InterfaceModeCards: View {
                 preview: .floating,
                 compact: compact
             )
-            if let hotKeysOnly {
+            if let hotKeysEnabled {
                 InterfaceModeCard(
                     title: "Hotkeys",
-                    subtitle: compact ? "Keyboard only" : "Run Rewrite or Translate only when you press a global shortcut.",
-                    isOn: hotKeysOnly,
+                    subtitle: compact ? "Rewrite and Translate with global shortcuts" : "Run Rewrite or Translate only when you press a global shortcut.",
+                    isOn: hotKeysEnabled,
                     accent: Color(red: 0.30, green: 0.78, blue: 0.62),
                     preview: .hotkeys,
                     compact: compact
@@ -646,7 +657,7 @@ struct OnboardingView: View {
                 InterfaceModeCards(
                     toolboxEnabled: onboardingModeBinding(.toolbox),
                     floatingIconEnabled: onboardingModeBinding(.floatingIcon),
-                    hotKeysOnly: onboardingModeBinding(.hotKeys),
+                    hotKeysEnabled: onboardingModeBinding(.hotKeys),
                     compact: false
                 )
                 if viewModel.onboardingInterfaceMode == .hotKeys {

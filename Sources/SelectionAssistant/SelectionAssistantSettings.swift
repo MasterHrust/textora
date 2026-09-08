@@ -45,6 +45,9 @@ enum SelectionAssistantSettings {
         static let enabled = "selectionAssistant.beta.enabled"
         static let toolboxEnabled = "selectionAssistant.toolbox.enabled"
         static let floatingIconEnabled = "selectionAssistant.floatingIcon.enabled"
+        static let hotKeysModeEnabled = "selectionAssistant.hotKeysMode.enabled"
+        static let hotKeysModeMigration = "selectionAssistant.hotKeysMode.migration.v1"
+        static let interfaceModeMigration = "selectionAssistant.interfaceMode.migration.v1"
         static let operation = "selectionAssistant.operation"
         static let activationMode = "selectionAssistant.activationMode"
         static let translationLanguage = "translation.targetLanguage"
@@ -59,10 +62,13 @@ enum SelectionAssistantSettings {
     }
 
     static func registerDefaults(defaults: UserDefaults = .standard) {
+        let existingHotKeysMode = defaults.bool(forKey: Keys.hotKeysModeEnabled)
+        let legacyActivationMode = defaults.string(forKey: Keys.activationMode)
         defaults.register(defaults: [
             Keys.enabled: true,
             Keys.toolboxEnabled: true,
             Keys.floatingIconEnabled: false,
+            Keys.hotKeysModeEnabled: false,
             Keys.operation: RewriteOperation.fixGrammar.rawValue,
             Keys.activationMode: SelectionActivationMode.automatic.rawValue,
             Keys.translationLanguage: "english",
@@ -73,6 +79,23 @@ enum SelectionAssistantSettings {
             Keys.translateHotKeyModifiers: UInt32(cmdKey | optionKey),
             Keys.translateHotKeyEnabled: true
         ])
+        if !defaults.bool(forKey: Keys.hotKeysModeMigration) {
+            let migratedValue = existingHotKeysMode
+                || legacyActivationMode == SelectionActivationMode.hotkeyOnly.rawValue
+            defaults.set(migratedValue, forKey: Keys.hotKeysModeEnabled)
+            defaults.set(true, forKey: Keys.hotKeysModeMigration)
+        }
+        if !defaults.bool(forKey: Keys.interfaceModeMigration) {
+            let toolboxEnabled = defaults.bool(forKey: Keys.toolboxEnabled)
+            let floatingIconEnabled = defaults.bool(forKey: Keys.floatingIconEnabled)
+            let hotKeysEnabled = defaults.bool(forKey: Keys.hotKeysModeEnabled)
+            if toolboxEnabled && floatingIconEnabled {
+                defaults.set(false, forKey: Keys.floatingIconEnabled)
+            } else if !toolboxEnabled && !floatingIconEnabled && !hotKeysEnabled {
+                defaults.set(true, forKey: Keys.toolboxEnabled)
+            }
+            defaults.set(true, forKey: Keys.interfaceModeMigration)
+        }
         if !defaults.bool(forKey: Keys.rewriteHotKeyDefaultRMigration) {
             let isLegacyDefault = defaults.integer(forKey: Keys.rewriteHotKeyCode) == 7
                 && UInt32(defaults.integer(forKey: Keys.rewriteHotKeyModifiers)) == UInt32(cmdKey | optionKey)
@@ -142,6 +165,30 @@ enum SelectionAssistantSettings {
         NotificationCenter.default.post(name: settingsDidChangeNotification, object: nil)
     }
 
+    static func hotKeysModeEnabled(defaults: UserDefaults = .standard) -> Bool {
+        registerDefaults(defaults: defaults)
+        return defaults.bool(forKey: Keys.hotKeysModeEnabled)
+    }
+
+    static func setHotKeysModeEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(enabled, forKey: Keys.hotKeysModeEnabled)
+        defaults.set(true, forKey: Keys.enabled)
+        NotificationCenter.default.post(name: settingsDidChangeNotification, object: nil)
+    }
+
+    static func setInterfaceModes(
+        toolbox: Bool,
+        floatingIcon: Bool,
+        hotKeys: Bool,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(toolbox, forKey: Keys.toolboxEnabled)
+        defaults.set(floatingIcon, forKey: Keys.floatingIconEnabled)
+        defaults.set(hotKeys, forKey: Keys.hotKeysModeEnabled)
+        defaults.set(true, forKey: Keys.enabled)
+        NotificationCenter.default.post(name: settingsDidChangeNotification, object: nil)
+    }
+
     static func activationMode(defaults: UserDefaults = .standard) -> SelectionActivationMode {
         registerDefaults(defaults: defaults)
         return SelectionActivationMode(rawValue: defaults.string(forKey: Keys.activationMode) ?? "") ?? .automatic
@@ -186,6 +233,7 @@ final class GlobalHotKeyManager {
 
     func reload() {
         stop()
+        guard SelectionAssistantSettings.hotKeysModeEnabled() else { return }
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
             var id = EventHotKeyID()

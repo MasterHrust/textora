@@ -36,6 +36,8 @@ final class SelectionAssistantController: NSObject, NSWindowDelegate {
     private var viewModelCancellable: AnyCancellable?
     private var automaticDetectionEnabled = true
     private var isProgrammaticallyMovingPanel = false
+    private var pendingHotKeyAction: TextoraHotKeyAction?
+    private var pendingHotKeyConsentBundleID: String?
 
     var onConsentRequired: ((CGRect, String) -> Void)?
 
@@ -95,6 +97,17 @@ final class SelectionAssistantController: NSObject, NSWindowDelegate {
         lastTraceSignature = nil
         viewModel.clear()
         panel?.orderOut(nil)
+    }
+
+    func resolvePendingHotKeyConsent(for bundleID: String, allowed: Bool) {
+        let action = pendingHotKeyConsentBundleID == bundleID ? pendingHotKeyAction : nil
+        pendingHotKeyAction = nil
+        pendingHotKeyConsentBundleID = nil
+        refreshAfterConsentChange()
+        guard allowed, let action else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            self?.performHotKeyAction(action)
+        }
     }
 
     func refreshAfterConsentChange() {
@@ -816,6 +829,22 @@ final class SelectionAssistantController: NSObject, NSWindowDelegate {
         resetResolvedSelectionState()
         viewModel.clear()
         allowFallbackProbeBriefly()
+
+        if let app = textService.frontmostAppInfo(),
+           app.bundleID != Bundle.main.bundleIdentifier {
+            switch textService.appConsentStatus(for: app.bundleID) {
+            case .allowed:
+                break
+            case .denied:
+                hideForNoSelection()
+                return
+            case .unknown:
+                pendingHotKeyAction = action
+                pendingHotKeyConsentBundleID = app.bundleID
+                onConsentRequired?(mouseAnchor(), app.bundleID)
+                return
+            }
+        }
 
         if let signal = textService.selectedTextSignalAnyFocus(),
            textService.appConsentStatus(for: signal.targetBundleID) == .unknown {

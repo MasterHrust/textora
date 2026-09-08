@@ -16,7 +16,7 @@ final class AppViewModel: ObservableObject {
         static let selectionAssistantBetaEnabled = SelectionAssistantSettings.Keys.enabled
         static let toolboxEnabled = SelectionAssistantSettings.Keys.toolboxEnabled
         static let floatingIconEnabled = SelectionAssistantSettings.Keys.floatingIconEnabled
-        static let selectionActivationMode = SelectionAssistantSettings.Keys.activationMode
+        static let hotKeysModeEnabled = SelectionAssistantSettings.Keys.hotKeysModeEnabled
     }
 
     private enum OnboardingDefaults {
@@ -95,10 +95,10 @@ final class AppViewModel: ObservableObject {
             SelectionAssistantSettings.setFloatingIconEnabled(floatingIconEnabled)
         }
     }
-    @Published var selectionActivationMode: SelectionActivationMode = .automatic {
+    @Published var hotKeysModeEnabled: Bool = false {
         didSet {
-            guard !isReloadingFromDefaults, oldValue != selectionActivationMode else { return }
-            SelectionAssistantSettings.setActivationMode(selectionActivationMode)
+            guard !isReloadingFromDefaults, oldValue != hotKeysModeEnabled else { return }
+            SelectionAssistantSettings.setHotKeysModeEnabled(hotKeysModeEnabled)
         }
     }
     @Published var rewriteHotKey = TextoraHotKey(keyCode: 15, modifiers: UInt32(cmdKey | optionKey), isEnabled: true) {
@@ -164,7 +164,7 @@ final class AppViewModel: ObservableObject {
         selectionAssistantBetaEnabled = UserDefaults.standard.bool(forKey: SettingsKeys.selectionAssistantBetaEnabled)
         toolboxEnabled = UserDefaults.standard.bool(forKey: SettingsKeys.toolboxEnabled)
         floatingIconEnabled = UserDefaults.standard.bool(forKey: SettingsKeys.floatingIconEnabled)
-        selectionActivationMode = SelectionAssistantSettings.activationMode()
+        hotKeysModeEnabled = SelectionAssistantSettings.hotKeysModeEnabled()
         operation = SelectionAssistantSettings.selectedOperation()
         translationLanguage = SelectionAssistantSettings.translationLanguage()
         rewriteHotKey = SelectionAssistantSettings.hotKey(for: .rewrite)
@@ -302,7 +302,10 @@ final class AppViewModel: ObservableObject {
         SelectionAssistantSettings.setEnabled(true)
         UserDefaults.standard.set(toolboxEnabled, forKey: SettingsKeys.toolboxEnabled)
         UserDefaults.standard.set(floatingIconEnabled, forKey: SettingsKeys.floatingIconEnabled)
-        UserDefaults.standard.set(selectionActivationMode.rawValue, forKey: SettingsKeys.selectionActivationMode)
+        UserDefaults.standard.set(hotKeysModeEnabled, forKey: SettingsKeys.hotKeysModeEnabled)
+        SelectionAssistantSettings.setActivationMode(
+            hotKeysModeEnabled && !toolboxEnabled && !floatingIconEnabled ? .hotkeyOnly : .automatic
+        )
         SelectionAssistantSettings.setSelectedOperation(operation)
         SelectionAssistantSettings.setTranslationLanguage(translationLanguage)
         NotificationCenter.default.post(name: SelectionAssistantSettings.settingsDidChangeNotification, object: nil)
@@ -340,7 +343,7 @@ final class AppViewModel: ObservableObject {
             customOpenAIBaseURL,
             String(toolboxEnabled),
             String(floatingIconEnabled),
-            selectionActivationMode.rawValue,
+            String(hotKeysModeEnabled),
             operation.rawValue,
             translationLanguage.rawValue,
             String(rewriteHotKey.keyCode), String(rewriteHotKey.modifiers), String(rewriteHotKey.isEnabled),
@@ -363,7 +366,7 @@ final class AppViewModel: ObservableObject {
     }
 
     var onboardingInterfaceMode: OnboardingInterfaceMode {
-        if selectionActivationMode == .hotkeyOnly { return .hotKeys }
+        if hotKeysModeEnabled && !toolboxEnabled && !floatingIconEnabled { return .hotKeys }
         return toolboxEnabled ? .toolbox : .floatingIcon
     }
 
@@ -379,20 +382,54 @@ final class AppViewModel: ObservableObject {
     func selectOnboardingInterfaceMode(_ mode: OnboardingInterfaceMode) {
         switch mode {
         case .toolbox:
-            selectionActivationMode = .automatic
-            toolboxEnabled = true
-            floatingIconEnabled = false
+            updateInterfaceModes(toolbox: true, floatingIcon: false, hotKeys: false)
         case .floatingIcon:
-            selectionActivationMode = .automatic
-            toolboxEnabled = false
-            floatingIconEnabled = true
+            updateInterfaceModes(toolbox: false, floatingIcon: true, hotKeys: false)
         case .hotKeys:
-            selectionActivationMode = .hotkeyOnly
-            toolboxEnabled = false
-            floatingIconEnabled = false
+            updateInterfaceModes(toolbox: false, floatingIcon: false, hotKeys: true)
             rewriteHotKey.isEnabled = true
             translateHotKey.isEnabled = true
         }
+    }
+
+    func setInterfaceMode(_ mode: OnboardingInterfaceMode, enabled: Bool) {
+        switch mode {
+        case .toolbox:
+            if enabled {
+                updateInterfaceModes(toolbox: true, floatingIcon: false, hotKeys: hotKeysModeEnabled)
+            } else if floatingIconEnabled || hotKeysModeEnabled {
+                updateInterfaceModes(toolbox: false, floatingIcon: floatingIconEnabled, hotKeys: hotKeysModeEnabled)
+            }
+        case .floatingIcon:
+            if enabled {
+                updateInterfaceModes(toolbox: false, floatingIcon: true, hotKeys: hotKeysModeEnabled)
+            } else if toolboxEnabled || hotKeysModeEnabled {
+                updateInterfaceModes(toolbox: toolboxEnabled, floatingIcon: false, hotKeys: hotKeysModeEnabled)
+            }
+        case .hotKeys:
+            if enabled {
+                updateInterfaceModes(toolbox: toolboxEnabled, floatingIcon: floatingIconEnabled, hotKeys: true)
+                if !rewriteHotKey.isEnabled && !translateHotKey.isEnabled {
+                    rewriteHotKey.isEnabled = true
+                    translateHotKey.isEnabled = true
+                }
+            } else if toolboxEnabled || floatingIconEnabled {
+                updateInterfaceModes(toolbox: toolboxEnabled, floatingIcon: floatingIconEnabled, hotKeys: false)
+            }
+        }
+    }
+
+    private func updateInterfaceModes(toolbox: Bool, floatingIcon: Bool, hotKeys: Bool) {
+        isReloadingFromDefaults = true
+        toolboxEnabled = toolbox
+        floatingIconEnabled = floatingIcon
+        hotKeysModeEnabled = hotKeys
+        isReloadingFromDefaults = false
+        SelectionAssistantSettings.setInterfaceModes(
+            toolbox: toolbox,
+            floatingIcon: floatingIcon,
+            hotKeys: hotKeys
+        )
     }
 
     @discardableResult

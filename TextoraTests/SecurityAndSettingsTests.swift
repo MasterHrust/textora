@@ -156,6 +156,61 @@ final class SecurityAndSettingsTests: XCTestCase {
             modifiers: UInt32(cmdKey | optionKey),
             isEnabled: true
         ))
+        XCTAssertFalse(SelectionAssistantSettings.hotKeysModeEnabled(defaults: defaults))
+    }
+
+    @MainActor
+    func testLegacyHotKeyOnlyModeMigratesToHotKeysInterface() throws {
+        let suiteName = "TextoraTests.HotKeyModeMigration.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(SelectionActivationMode.hotkeyOnly.rawValue, forKey: SelectionAssistantSettings.Keys.activationMode)
+
+        SelectionAssistantSettings.registerDefaults(defaults: defaults)
+
+        XCTAssertTrue(SelectionAssistantSettings.hotKeysModeEnabled(defaults: defaults))
+    }
+
+    @MainActor
+    func testExplicitHotKeysModeSurvivesSettingsRegistration() throws {
+        let suiteName = "TextoraTests.HotKeyModePersistence.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: SelectionAssistantSettings.Keys.hotKeysModeEnabled)
+
+        SelectionAssistantSettings.registerDefaults(defaults: defaults)
+
+        XCTAssertTrue(SelectionAssistantSettings.hotKeysModeEnabled(defaults: defaults))
+    }
+
+    @MainActor
+    func testLegacyToolboxAndFloatingCombinationNormalizesToToolbox() throws {
+        let suiteName = "TextoraTests.InterfaceModeNormalization.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: SelectionAssistantSettings.Keys.toolboxEnabled)
+        defaults.set(true, forKey: SelectionAssistantSettings.Keys.floatingIconEnabled)
+        defaults.removeObject(forKey: SelectionAssistantSettings.Keys.interfaceModeMigration)
+
+        SelectionAssistantSettings.registerDefaults(defaults: defaults)
+
+        XCTAssertTrue(defaults.bool(forKey: SelectionAssistantSettings.Keys.toolboxEnabled))
+        XCTAssertFalse(defaults.bool(forKey: SelectionAssistantSettings.Keys.floatingIconEnabled))
+    }
+
+    @MainActor
+    func testAtLeastOneInterfaceModeRemainsEnabled() throws {
+        let suiteName = "TextoraTests.InterfaceModeFallback.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(false, forKey: SelectionAssistantSettings.Keys.toolboxEnabled)
+        defaults.set(false, forKey: SelectionAssistantSettings.Keys.floatingIconEnabled)
+        defaults.set(false, forKey: SelectionAssistantSettings.Keys.hotKeysModeEnabled)
+        defaults.removeObject(forKey: SelectionAssistantSettings.Keys.interfaceModeMigration)
+
+        SelectionAssistantSettings.registerDefaults(defaults: defaults)
+
+        XCTAssertTrue(defaults.bool(forKey: SelectionAssistantSettings.Keys.toolboxEnabled))
     }
 
     @MainActor
@@ -197,6 +252,8 @@ final class SecurityAndSettingsTests: XCTestCase {
             keys.translationLanguage,
             keys.operation,
             keys.activationMode,
+            keys.hotKeysModeEnabled,
+            keys.hotKeysModeMigration,
             keys.rewriteHotKeyCode,
             keys.rewriteHotKeyModifiers,
             keys.rewriteHotKeyEnabled,
@@ -218,6 +275,7 @@ final class SecurityAndSettingsTests: XCTestCase {
         defaults.set(TranslationLanguage.russian.rawValue, forKey: keys.translationLanguage)
         SelectionAssistantSettings.setSelectedOperation(.makeProfessional)
         SelectionAssistantSettings.setActivationMode(.hotkeyOnly)
+        SelectionAssistantSettings.setHotKeysModeEnabled(true)
         SelectionAssistantSettings.setHotKey(
             TextoraHotKey(keyCode: 8, modifiers: UInt32(cmdKey | controlKey), isEnabled: true),
             for: .rewrite
@@ -230,6 +288,7 @@ final class SecurityAndSettingsTests: XCTestCase {
         XCTAssertEqual(first.operation, .makeProfessional)
         XCTAssertEqual(second.operation, .makeProfessional)
         XCTAssertEqual(SelectionAssistantSettings.activationMode(), .hotkeyOnly)
+        XCTAssertTrue(SelectionAssistantSettings.hotKeysModeEnabled())
         XCTAssertEqual(SelectionAssistantSettings.hotKey(for: .rewrite).keyCode, 8)
     }
 }

@@ -75,7 +75,7 @@ enum KeychainHelper {
         loadAll().map { _ in () }
     }
 
-    // MARK: - Migration (one-time: old keychain / UserDefaults / file → Data Protection Keychain)
+    // MARK: - Migration (one-time: old keychain / UserDefaults / file -> system Keychain)
 
     @discardableResult
     static func migrateIfNeeded() -> Result<Void, KeychainError> {
@@ -128,14 +128,13 @@ enum KeychainHelper {
         return .success(())
     }
 
-    // MARK: - Data Protection Keychain (modern, no system prompts)
+    // MARK: - macOS system Keychain
 
     private static func baseQuery() -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecUseDataProtectionKeychain as String: true
+            kSecAttrAccount as String: account
         ]
     }
 
@@ -181,7 +180,6 @@ enum KeychainHelper {
         if updateStatus == errSecItemNotFound {
             var add = baseQuery()
             add[kSecValueData as String] = data
-            add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
             status = SecItemAdd(add as CFDictionary, nil)
         } else {
             status = updateStatus
