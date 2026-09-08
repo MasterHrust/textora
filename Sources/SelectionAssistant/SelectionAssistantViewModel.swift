@@ -107,6 +107,12 @@ final class SelectionAssistantViewModel: ObservableObject {
         case error(String)
     }
 
+    enum PresentationMode: Equatable {
+        case standard
+        case hotKeyRewrite
+        case hotKeyTranslate
+    }
+
     @Published var operation: RewriteOperation {
         didSet {
             guard oldValue != operation else { return }
@@ -119,6 +125,7 @@ final class SelectionAssistantViewModel: ObservableObject {
     @Published var translationLanguage: TranslationLanguage = .english {
         didSet {
             guard oldValue != translationLanguage else { return }
+            SelectionAssistantSettings.setTranslationLanguage(translationLanguage)
             translatedText = ""
             translationStatus = .idle
             isLanguagePickerExpanded = false
@@ -130,6 +137,7 @@ final class SelectionAssistantViewModel: ObservableObject {
     @Published private(set) var rewrittenText: String = ""
     @Published private(set) var translatedText: String = ""
     @Published var isLanguagePickerExpanded = false
+    @Published private(set) var presentationMode: PresentationMode = .standard
 
     private let textService = TextAccessService()
     private let aiClient = AIClient()
@@ -143,6 +151,15 @@ final class SelectionAssistantViewModel: ObservableObject {
     init() {
         SelectionAssistantSettings.registerDefaults()
         operation = SelectionAssistantSettings.selectedOperation()
+        if UserDefaults.standard.object(forKey: SelectionAssistantSettings.Keys.translationLanguage) != nil {
+            translationLanguage = SelectionAssistantSettings.translationLanguage()
+        } else if let legacy = UserDefaults.standard.string(forKey: "inlineTranslate.lastTargetLanguage"),
+                  let saved = TranslationLanguage.allCases.first(where: {
+                      $0.displayName.caseInsensitiveCompare(legacy) == .orderedSame
+                  }) {
+            translationLanguage = saved
+            SelectionAssistantSettings.setTranslationLanguage(saved)
+        }
     }
 
     var canApply: Bool {
@@ -194,9 +211,22 @@ final class SelectionAssistantViewModel: ObservableObject {
         status = .idle
         translationStatus = .idle
         isLanguagePickerExpanded = false
+        presentationMode = .standard
     }
 
-    func setSelectionContext(_ context: TextAccessService.FocusedTextContext) {
+    func prepareHotKeyPresentation(_ action: TextoraHotKeyAction) {
+        operation = SelectionAssistantSettings.selectedOperation()
+        translationLanguage = SelectionAssistantSettings.translationLanguage()
+        presentationMode = action == .rewrite ? .hotKeyRewrite : .hotKeyTranslate
+        isLanguagePickerExpanded = false
+    }
+
+    func setSelectionContext(
+        _ context: TextAccessService.FocusedTextContext,
+        automaticallyCheck: Bool = true,
+        preservePresentation: Bool = false
+    ) {
+        if !preservePresentation { presentationMode = .standard }
         let fingerprint = Self.fingerprint(for: context)
         if fingerprint == currentFingerprint, !rewrittenText.isEmpty || status == .checking || status == .noChanges {
             return
@@ -208,7 +238,11 @@ final class SelectionAssistantViewModel: ObservableObject {
         translatedText = ""
         translationStatus = .idle
         isLanguagePickerExpanded = false
-        startCheck(for: context)
+        if automaticallyCheck {
+            startCheck(for: context)
+        } else {
+            status = .waiting
+        }
     }
 
     func apply(onFinished: @escaping () -> Void) {
@@ -266,6 +300,15 @@ final class SelectionAssistantViewModel: ObservableObject {
                 translationStatus = .error(error.localizedDescription)
             }
         }
+    }
+
+    @discardableResult
+    func copyTranslation() -> Bool {
+        guard case .ready = translationStatus,
+              !translatedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        return pasteboard.setString(translatedText, forType: .string)
     }
 
     private func startCheck(for context: TextAccessService.FocusedTextContext) {

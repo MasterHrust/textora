@@ -16,13 +16,15 @@ targets:
       base:
         INFOPLIST_FILE: Sources/Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: com.textora.app
+        CODE_SIGN_ENTITLEMENTS: Sources/Textora.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 35Q2T38T7Q
       configs:
         Release:
           ENABLE_APP_SANDBOX: NO
           ENABLE_HARDENED_RUNTIME: YES
           ENABLE_OUTGOING_NETWORK_CONNECTIONS: NO
           ENABLE_USER_SELECTED_FILES: NO
-          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
     scheme:
       testTargets:
         - TextoraTests
@@ -31,9 +33,7 @@ targets:
     platform: macOS
     sources:
       - path: TextoraTests
-      - path: Sources/EasySwitch
-        excludes:
-          - EasySwitchManager.swift
+      - path: Sources/GrammarlyRewritePlanner.swift
     dependencies:
       - target: Textora
     settings:

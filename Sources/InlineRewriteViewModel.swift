@@ -23,7 +23,18 @@ final class InlineRewriteViewModel: ObservableObject {
     @Published var applyErrorText = ""
     @Published private(set) var noChangesNeeded = false
 
-    @Published var translateTargetLanguage: String
+    @Published var translateTargetLanguage: String {
+        didSet {
+            let value = translateTargetLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty else { return }
+            UserDefaults.standard.set(value, forKey: Self.lastTranslateLanguageKey)
+            if let language = TranslationLanguage.allCases.first(where: {
+                $0.displayName.caseInsensitiveCompare(value) == .orderedSame
+            }) {
+                UserDefaults.standard.set(language.rawValue, forKey: SelectionAssistantSettings.Keys.translationLanguage)
+            }
+        }
+    }
     @Published var translatedText: String = ""
     @Published var isTranslating: Bool = false
     @Published var translateErrorText: String = ""
@@ -142,9 +153,11 @@ final class InlineRewriteViewModel: ObservableObject {
     ]
 
     init() {
-        translateTargetLanguage =
-            (UserDefaults.standard.string(forKey: Self.lastTranslateLanguageKey) ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let sharedLanguage = UserDefaults.standard.string(forKey: SelectionAssistantSettings.Keys.translationLanguage)
+            .flatMap(TranslationLanguage.init(rawValue:))?.displayName
+        translateTargetLanguage = sharedLanguage
+            ?? (UserDefaults.standard.string(forKey: Self.lastTranslateLanguageKey) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
         if let raw = UserDefaults.standard.string(forKey: Self.lastOperationKey) {
             operation = Self.migrateOperation(from: raw) ?? .fixGrammar
         } else {

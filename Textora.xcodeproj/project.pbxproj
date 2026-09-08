@@ -7,53 +7,32 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		01A1B2C3D4E5F60718293A11 /* SelectionAssistantController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01A1B2C3D4E5F60718293A01 /* SelectionAssistantController.swift */; };
-		01A1B2C3D4E5F60718293A12 /* SelectionAssistantSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01A1B2C3D4E5F60718293A02 /* SelectionAssistantSettings.swift */; };
-		01A1B2C3D4E5F60718293A13 /* SelectionAssistantViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01A1B2C3D4E5F60718293A03 /* SelectionAssistantViewModel.swift */; };
-		01A1B2C3D4E5F60718293A14 /* SelectionToolbarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01A1B2C3D4E5F60718293A04 /* SelectionToolbarView.swift */; };
 		026AE038C3CC7104C457F4BC /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03FB338E9DBEE2E791F55CB6 /* KeychainHelper.swift */; };
-		098B8129632FC2A0E3A42EA0 /* ReplacementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47980A73A856D69377F18964 /* ReplacementService.swift */; };
 		16A1AD437ED20C62601BBBC8 /* InlineRewritePanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4186B001A370380D5EF520C /* InlineRewritePanelController.swift */; };
 		170DAD722EF2B9AE0A74E034 /* TextoraAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 641D1A2A1ED1C3F6CC370219 /* TextoraAppDelegate.swift */; };
+		176107AE988B1737C2C673C1 /* GrammarlyRewritePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 516E4F6FEEB97CFE93043069 /* GrammarlyRewritePlanner.swift */; };
 		1BC6850DC9195C1BBBE7E7E4 /* TextAccessService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A92B1B1A4B68C4794D7F706 /* TextAccessService.swift */; };
-		2FBB3A9C8AEE87B4D03E6535 /* WordBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9009321A001CE67F662A5F65 /* WordBuffer.swift */; };
+		261DA278842242F8F6CAFC24 /* SelectionAssistantSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF5736C41F76F220B2A64787 /* SelectionAssistantSettings.swift */; };
+		2FE03D1B9748B4C23028CD66 /* SelectionAssistantViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9793F10C2EE38A217E02A313 /* SelectionAssistantViewModel.swift */; };
 		324FFF56680CC61A53601BB0 /* AIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDFA3B38183BC8A18BB52F2B /* AIClient.swift */; };
-		38223F742DB91B93F72CCDAC /* ReplacementServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF82180214CA54812509E58C /* ReplacementServiceTests.swift */; };
-		3B10431B759888AE08871302 /* EasySwitchDecisionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93D1AA407053C29344C79D39 /* EasySwitchDecisionEngine.swift */; };
+		3B61B4CC47354DFD3785A7B8 /* GrammarlyRewritePlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 348E6C817C7C781E49A2C9A8 /* GrammarlyRewritePlannerTests.swift */; };
 		3E96EA5EF2C443A1913099E7 /* DraggableFloatingPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46C7329329CAE8DEDC7379E /* DraggableFloatingPanel.swift */; };
-		3F7C0B1A9E2D4C6B8A1F5E30 /* GrammarlyRewritePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C9E1D3B5A6F4280B4C8E2D1 /* GrammarlyRewritePlanner.swift */; };
-		3F7C0B1A9E2D4C6B8A1F5E31 /* GrammarlyRewritePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C9E1D3B5A6F4280B4C8E2D1 /* GrammarlyRewritePlanner.swift */; };
-		40255A5A541315D3D0DE684F /* EasySwitchSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8C3323B309B30E4C44CEACF /* EasySwitchSettings.swift */; };
-		46F5F3A377D347829B8E04AF /* WordBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9009321A001CE67F662A5F65 /* WordBuffer.swift */; };
-		48245078D5F58FBDF5FF8170 /* EasySwitchManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 736EF60F9AF67F63E319E461 /* EasySwitchManager.swift */; };
 		486DE7B0517C7538FBEE17E8 /* FloatingButtonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2DC8AC988823AE36D048CC7 /* FloatingButtonView.swift */; };
-		48C4EC36E1EBECF4A97A1E96 /* KeyboardLayoutMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83463572DC1F11463556C6FF /* KeyboardLayoutMapper.swift */; };
-		4F5547F5D83DD173A6E3367E /* WordBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 776696F13F21A6A552A4EC04 /* WordBufferTests.swift */; };
-		5A051A7A15DDCE9D2E59A29C /* UserDictionary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F176E04F60EE14B8E35AAA88 /* UserDictionary.swift */; };
-		5E2B06A0A4D24B21B2E4F871 /* common_ru_forms.txt in Resources */ = {isa = PBXBuildFile; fileRef = 5E2B06A1A4D24B21B2E4F871 /* common_ru_forms.txt */; };
-		5E2B06A2A4D24B21B2E4F871 /* LICENSE_common_ru_forms.txt in Resources */ = {isa = PBXBuildFile; fileRef = 5E2B06A3A4D24B21B2E4F871 /* LICENSE_common_ru_forms.txt */; };
-		61E130AE07B14887D73A714E /* common_ru_words.txt in Resources */ = {isa = PBXBuildFile; fileRef = B34FBDF4CDFD0C37D4E4FBDA /* common_ru_words.txt */; };
 		695BAC4B6A71A3E4F464661C /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD53487A6560FD81FE7DE9E1 /* AppCoordinator.swift */; };
 		6B10DC809A0563BD2748674E /* AccessibilityWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E3069E20EC43A2400E2C1B /* AccessibilityWizardView.swift */; };
-		6DAAF5F0ACED5A02DD0CD637 /* DecisionEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C160135B317CD7416B58514 /* DecisionEngineTests.swift */; };
-		72519CCCED048AC22DCB0623 /* EasySwitchSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8C3323B309B30E4C44CEACF /* EasySwitchSettings.swift */; };
 		7930D07C9F44DFD7933A96DB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 72CDDF25FD6A0084CE6C9149 /* Assets.xcassets */; };
-		7C57A58FDF7CDB1D6C7C5640 /* KeyboardLayoutMapperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1023C6174C6D25932C1C87F /* KeyboardLayoutMapperTests.swift */; };
-		7D8A1E3C5B6F4290A4C9E2D1 /* GrammarlyRewritePlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9D2E4F6A8C14039B5E7D1C2 /* GrammarlyRewritePlannerTests.swift */; };
+		7DABCA309A6C1978537546FA /* GrammarlyRewritePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 516E4F6FEEB97CFE93043069 /* GrammarlyRewritePlanner.swift */; };
 		82F55A9228CEA2D272E11F47 /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D12E30ABC5DF297BEBE656F /* AppViewModel.swift */; };
-		832274A19FDD2E72D33232F2 /* common_en_words.txt in Resources */ = {isa = PBXBuildFile; fileRef = 441AC0202A156188AD4EF26A /* common_en_words.txt */; };
-		8B3BA22F61CA18A86D3F35EC /* ReplacementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47980A73A856D69377F18964 /* ReplacementService.swift */; };
+		90EFED5ED4A2F5D1365178DB /* SelectionToolbarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F04D0CA50B7FDCE31F262571 /* SelectionToolbarView.swift */; };
+		9821610AB0F68301987A6BBD /* SelectionAssistantController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BC2704F44FAB730B898089B /* SelectionAssistantController.swift */; };
 		A315AADAD3FB2D3F434A2BC3 /* TextoraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4072587BAA8858F50B0BEF4D /* TextoraApp.swift */; };
-		A390F23EEE260C85FD88744B /* UserDictionary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F176E04F60EE14B8E35AAA88 /* UserDictionary.swift */; };
 		A8EAFF5A91AD75479D3AD02D /* InlineRewriteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 118D4E1534298FDDBD25D49B /* InlineRewriteView.swift */; };
 		AA8B0863398E255BDCF66DDE /* FloatingHelperController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E43A2D871EF7E4395D8B177B /* FloatingHelperController.swift */; };
-		C100620227E980DE525E8028 /* LanguageScorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2074F0A7A4B08CAB9303DD /* LanguageScorer.swift */; };
-		C1451CE3E00B2BC306573DBC /* EasySwitchDecisionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93D1AA407053C29344C79D39 /* EasySwitchDecisionEngine.swift */; };
+		B034A1D8121367E6BFDC6FAA /* SecurityAndSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7C86F8004EA584FC0993CCE /* SecurityAndSettingsTests.swift */; };
 		C196E96AD4B703765CB5CA65 /* MarkerViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7EF71A9570085EEB3690569 /* MarkerViews.swift */; };
 		C2A6A78088D1B9765015F188 /* InlineRewriteViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E2401B55C33648192CDAB73 /* InlineRewriteViewModel.swift */; };
-		D2FBA0FFA646B9F69A5189C2 /* KeyboardLayoutMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83463572DC1F11463556C6FF /* KeyboardLayoutMapper.swift */; };
-		E02C27F599C94B03453B8BA3 /* LanguageScorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2074F0A7A4B08CAB9303DD /* LanguageScorer.swift */; };
 		E4A982EDDD503D59E3BA4E90 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 416D4536F89F3B7892ECC7D6 /* ContentView.swift */; };
+		F0B5D4AF1598B8AA952BAFB5 /* KeyboardInputSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F74B8A7F0C4CB0A0D05FBDC /* KeyboardInputSource.swift */; };
 		F7131511098F7CCBD1A9A743 /* AppConsentPromptController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E06223B72C034D28D7097A /* AppConsentPromptController.swift */; };
 		F9EDDDA0B5B5FB8EA7DC2D7A /* helper-icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 691BD7E2D55CD14AA7B983F8 /* helper-icon.png */; };
 		FCADB3D2438B0EA37C9F0AC8 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8F80F4CABD08C9775382E58 /* Models.swift */; };
@@ -70,46 +49,33 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		01A1B2C3D4E5F60718293A01 /* SelectionAssistantController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionAssistantController.swift; sourceTree = "<group>"; };
-		01A1B2C3D4E5F60718293A02 /* SelectionAssistantSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionAssistantSettings.swift; sourceTree = "<group>"; };
-		01A1B2C3D4E5F60718293A03 /* SelectionAssistantViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionAssistantViewModel.swift; sourceTree = "<group>"; };
-		01A1B2C3D4E5F60718293A04 /* SelectionToolbarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionToolbarView.swift; sourceTree = "<group>"; };
 		03FB338E9DBEE2E791F55CB6 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
 		0D12E30ABC5DF297BEBE656F /* AppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModel.swift; sourceTree = "<group>"; };
 		118D4E1534298FDDBD25D49B /* InlineRewriteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineRewriteView.swift; sourceTree = "<group>"; };
 		224A6BBADE1A3E03044D29EE /* Textora.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Textora.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		27E3069E20EC43A2400E2C1B /* AccessibilityWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityWizardView.swift; sourceTree = "<group>"; };
+		348E6C817C7C781E49A2C9A8 /* GrammarlyRewritePlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrammarlyRewritePlannerTests.swift; sourceTree = "<group>"; };
+		3F74B8A7F0C4CB0A0D05FBDC /* KeyboardInputSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardInputSource.swift; sourceTree = "<group>"; };
 		4072587BAA8858F50B0BEF4D /* TextoraApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextoraApp.swift; sourceTree = "<group>"; };
 		416D4536F89F3B7892ECC7D6 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		441AC0202A156188AD4EF26A /* common_en_words.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = common_en_words.txt; sourceTree = "<group>"; };
-		47980A73A856D69377F18964 /* ReplacementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplacementService.swift; sourceTree = "<group>"; };
-		4C160135B317CD7416B58514 /* DecisionEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionEngineTests.swift; sourceTree = "<group>"; };
+		516E4F6FEEB97CFE93043069 /* GrammarlyRewritePlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrammarlyRewritePlanner.swift; sourceTree = "<group>"; };
 		58521F6930CFB7E7B24BC752 /* TextoraTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TextoraTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5BC2704F44FAB730B898089B /* SelectionAssistantController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionAssistantController.swift; sourceTree = "<group>"; };
 		5E2401B55C33648192CDAB73 /* InlineRewriteViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineRewriteViewModel.swift; sourceTree = "<group>"; };
-		5E2B06A1A4D24B21B2E4F871 /* common_ru_forms.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = common_ru_forms.txt; sourceTree = "<group>"; };
-		5E2B06A3A4D24B21B2E4F871 /* LICENSE_common_ru_forms.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE_common_ru_forms.txt; sourceTree = "<group>"; };
 		641D1A2A1ED1C3F6CC370219 /* TextoraAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextoraAppDelegate.swift; sourceTree = "<group>"; };
 		691BD7E2D55CD14AA7B983F8 /* helper-icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "helper-icon.png"; sourceTree = "<group>"; };
+		6DA5DD593AA0FCD13D9EC2DB /* Textora.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Textora.entitlements; sourceTree = "<group>"; };
 		72CDDF25FD6A0084CE6C9149 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		736EF60F9AF67F63E319E461 /* EasySwitchManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EasySwitchManager.swift; sourceTree = "<group>"; };
-		776696F13F21A6A552A4EC04 /* WordBufferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WordBufferTests.swift; sourceTree = "<group>"; };
-		7A2074F0A7A4B08CAB9303DD /* LanguageScorer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageScorer.swift; sourceTree = "<group>"; };
-		7C9E1D3B5A6F4280B4C8E2D1 /* GrammarlyRewritePlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrammarlyRewritePlanner.swift; sourceTree = "<group>"; };
-		83463572DC1F11463556C6FF /* KeyboardLayoutMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardLayoutMapper.swift; sourceTree = "<group>"; };
-		9009321A001CE67F662A5F65 /* WordBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WordBuffer.swift; sourceTree = "<group>"; };
-		93D1AA407053C29344C79D39 /* EasySwitchDecisionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EasySwitchDecisionEngine.swift; sourceTree = "<group>"; };
+		9793F10C2EE38A217E02A313 /* SelectionAssistantViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionAssistantViewModel.swift; sourceTree = "<group>"; };
 		9A92B1B1A4B68C4794D7F706 /* TextAccessService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextAccessService.swift; sourceTree = "<group>"; };
-		A1023C6174C6D25932C1C87F /* KeyboardLayoutMapperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardLayoutMapperTests.swift; sourceTree = "<group>"; };
 		B2DC8AC988823AE36D048CC7 /* FloatingButtonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingButtonView.swift; sourceTree = "<group>"; };
-		B34FBDF4CDFD0C37D4E4FBDA /* common_ru_words.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = common_ru_words.txt; sourceTree = "<group>"; };
 		B7E06223B72C034D28D7097A /* AppConsentPromptController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConsentPromptController.swift; sourceTree = "<group>"; };
 		B7EF71A9570085EEB3690569 /* MarkerViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkerViews.swift; sourceTree = "<group>"; };
-		B8C3323B309B30E4C44CEACF /* EasySwitchSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EasySwitchSettings.swift; sourceTree = "<group>"; };
-		B9D2E4F6A8C14039B5E7D1C2 /* GrammarlyRewritePlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrammarlyRewritePlannerTests.swift; sourceTree = "<group>"; };
-		CF82180214CA54812509E58C /* ReplacementServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplacementServiceTests.swift; sourceTree = "<group>"; };
+		BF5736C41F76F220B2A64787 /* SelectionAssistantSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionAssistantSettings.swift; sourceTree = "<group>"; };
+		C7C86F8004EA584FC0993CCE /* SecurityAndSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityAndSettingsTests.swift; sourceTree = "<group>"; };
 		DD53487A6560FD81FE7DE9E1 /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
 		E43A2D871EF7E4395D8B177B /* FloatingHelperController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingHelperController.swift; sourceTree = "<group>"; };
-		F176E04F60EE14B8E35AAA88 /* UserDictionary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDictionary.swift; sourceTree = "<group>"; };
+		F04D0CA50B7FDCE31F262571 /* SelectionToolbarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionToolbarView.swift; sourceTree = "<group>"; };
 		F4186B001A370380D5EF520C /* InlineRewritePanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineRewritePanelController.swift; sourceTree = "<group>"; };
 		F46C7329329CAE8DEDC7379E /* DraggableFloatingPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraggableFloatingPanel.swift; sourceTree = "<group>"; };
 		F889CFF6CF88B62CE4585E1D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -118,54 +84,20 @@
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
-		01A1B2C3D4E5F60718293A21 /* SelectionAssistant */ = {
-			isa = PBXGroup;
-			children = (
-				01A1B2C3D4E5F60718293A01 /* SelectionAssistantController.swift */,
-				01A1B2C3D4E5F60718293A02 /* SelectionAssistantSettings.swift */,
-				01A1B2C3D4E5F60718293A03 /* SelectionAssistantViewModel.swift */,
-				01A1B2C3D4E5F60718293A04 /* SelectionToolbarView.swift */,
-			);
-			path = SelectionAssistant;
-			sourceTree = "<group>";
-		};
 		5EC32467F6544FA5FC0B8C1D /* Resources */ = {
 			isa = PBXGroup;
 			children = (
 				72CDDF25FD6A0084CE6C9149 /* Assets.xcassets */,
 				691BD7E2D55CD14AA7B983F8 /* helper-icon.png */,
-				7B6B9A2BC8D90A869960D930 /* EasySwitch */,
 			);
 			path = Resources;
-			sourceTree = "<group>";
-		};
-		7B6B9A2BC8D90A869960D930 /* EasySwitch */ = {
-			isa = PBXGroup;
-			children = (
-				441AC0202A156188AD4EF26A /* common_en_words.txt */,
-				5E2B06A3A4D24B21B2E4F871 /* LICENSE_common_ru_forms.txt */,
-				5E2B06A1A4D24B21B2E4F871 /* common_ru_forms.txt */,
-				B34FBDF4CDFD0C37D4E4FBDA /* common_ru_words.txt */,
-			);
-			path = EasySwitch;
-			sourceTree = "<group>";
-		};
-		856C9070325C9223B98B4AC7 /* EasySwitch */ = {
-			isa = PBXGroup;
-			children = (
-				4C160135B317CD7416B58514 /* DecisionEngineTests.swift */,
-				A1023C6174C6D25932C1C87F /* KeyboardLayoutMapperTests.swift */,
-				CF82180214CA54812509E58C /* ReplacementServiceTests.swift */,
-				776696F13F21A6A552A4EC04 /* WordBufferTests.swift */,
-			);
-			path = EasySwitch;
 			sourceTree = "<group>";
 		};
 		AB3DBD3B80C8E289B18E6D36 /* TextoraTests */ = {
 			isa = PBXGroup;
 			children = (
-				B9D2E4F6A8C14039B5E7D1C2 /* GrammarlyRewritePlannerTests.swift */,
-				856C9070325C9223B98B4AC7 /* EasySwitch */,
+				348E6C817C7C781E49A2C9A8 /* GrammarlyRewritePlannerTests.swift */,
+				C7C86F8004EA584FC0993CCE /* SecurityAndSettingsTests.swift */,
 			);
 			path = TextoraTests;
 			sourceTree = "<group>";
@@ -181,22 +113,34 @@
 				416D4536F89F3B7892ECC7D6 /* ContentView.swift */,
 				F46C7329329CAE8DEDC7379E /* DraggableFloatingPanel.swift */,
 				B2DC8AC988823AE36D048CC7 /* FloatingButtonView.swift */,
-				7C9E1D3B5A6F4280B4C8E2D1 /* GrammarlyRewritePlanner.swift */,
 				E43A2D871EF7E4395D8B177B /* FloatingHelperController.swift */,
+				516E4F6FEEB97CFE93043069 /* GrammarlyRewritePlanner.swift */,
 				F889CFF6CF88B62CE4585E1D /* Info.plist */,
 				F4186B001A370380D5EF520C /* InlineRewritePanelController.swift */,
 				118D4E1534298FDDBD25D49B /* InlineRewriteView.swift */,
 				5E2401B55C33648192CDAB73 /* InlineRewriteViewModel.swift */,
+				3F74B8A7F0C4CB0A0D05FBDC /* KeyboardInputSource.swift */,
 				03FB338E9DBEE2E791F55CB6 /* KeychainHelper.swift */,
 				B7EF71A9570085EEB3690569 /* MarkerViews.swift */,
 				F8F80F4CABD08C9775382E58 /* Models.swift */,
 				9A92B1B1A4B68C4794D7F706 /* TextAccessService.swift */,
+				6DA5DD593AA0FCD13D9EC2DB /* Textora.entitlements */,
 				4072587BAA8858F50B0BEF4D /* TextoraApp.swift */,
 				641D1A2A1ED1C3F6CC370219 /* TextoraAppDelegate.swift */,
-				01A1B2C3D4E5F60718293A21 /* SelectionAssistant */,
-				FA55E9D0E2CEA9D5DCFDE5AD /* EasySwitch */,
+				E0A775E7BD700A45D886DBA3 /* SelectionAssistant */,
 			);
 			path = Sources;
+			sourceTree = "<group>";
+		};
+		E0A775E7BD700A45D886DBA3 /* SelectionAssistant */ = {
+			isa = PBXGroup;
+			children = (
+				5BC2704F44FAB730B898089B /* SelectionAssistantController.swift */,
+				BF5736C41F76F220B2A64787 /* SelectionAssistantSettings.swift */,
+				9793F10C2EE38A217E02A313 /* SelectionAssistantViewModel.swift */,
+				F04D0CA50B7FDCE31F262571 /* SelectionToolbarView.swift */,
+			);
+			path = SelectionAssistant;
 			sourceTree = "<group>";
 		};
 		E54D2E17A9C3F08C1353B4FB /* Products */ = {
@@ -216,21 +160,6 @@
 				AB3DBD3B80C8E289B18E6D36 /* TextoraTests */,
 				E54D2E17A9C3F08C1353B4FB /* Products */,
 			);
-			sourceTree = "<group>";
-		};
-		FA55E9D0E2CEA9D5DCFDE5AD /* EasySwitch */ = {
-			isa = PBXGroup;
-			children = (
-				93D1AA407053C29344C79D39 /* EasySwitchDecisionEngine.swift */,
-				736EF60F9AF67F63E319E461 /* EasySwitchManager.swift */,
-				B8C3323B309B30E4C44CEACF /* EasySwitchSettings.swift */,
-				83463572DC1F11463556C6FF /* KeyboardLayoutMapper.swift */,
-				7A2074F0A7A4B08CAB9303DD /* LanguageScorer.swift */,
-				47980A73A856D69377F18964 /* ReplacementService.swift */,
-				F176E04F60EE14B8E35AAA88 /* UserDictionary.swift */,
-				9009321A001CE67F662A5F65 /* WordBuffer.swift */,
-			);
-			path = EasySwitch;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -279,7 +208,13 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2600;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					7D7B2A80B85F61E0B28F613D = {
+						DevelopmentTeam = 35Q2T38T7Q;
+						ProvisioningStyle = Automatic;
+					};
+				};
 			};
 			buildConfigurationList = DBAFC8A3F7CAEB860F109480 /* Build configuration list for PBXProject "Textora" */;
 			developmentRegion = en;
@@ -307,10 +242,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				7930D07C9F44DFD7933A96DB /* Assets.xcassets in Resources */,
-				832274A19FDD2E72D33232F2 /* common_en_words.txt in Resources */,
-				5E2B06A2A4D24B21B2E4F871 /* LICENSE_common_ru_forms.txt in Resources */,
-				5E2B06A0A4D24B21B2E4F871 /* common_ru_forms.txt in Resources */,
-				61E130AE07B14887D73A714E /* common_ru_words.txt in Resources */,
 				F9EDDDA0B5B5FB8EA7DC2D7A /* helper-icon.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -322,19 +253,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6DAAF5F0ACED5A02DD0CD637 /* DecisionEngineTests.swift in Sources */,
-				C1451CE3E00B2BC306573DBC /* EasySwitchDecisionEngine.swift in Sources */,
-				40255A5A541315D3D0DE684F /* EasySwitchSettings.swift in Sources */,
-				3F7C0B1A9E2D4C6B8A1F5E31 /* GrammarlyRewritePlanner.swift in Sources */,
-				7D8A1E3C5B6F4290A4C9E2D1 /* GrammarlyRewritePlannerTests.swift in Sources */,
-				48C4EC36E1EBECF4A97A1E96 /* KeyboardLayoutMapper.swift in Sources */,
-				7C57A58FDF7CDB1D6C7C5640 /* KeyboardLayoutMapperTests.swift in Sources */,
-				C100620227E980DE525E8028 /* LanguageScorer.swift in Sources */,
-				098B8129632FC2A0E3A42EA0 /* ReplacementService.swift in Sources */,
-				38223F742DB91B93F72CCDAC /* ReplacementServiceTests.swift in Sources */,
-				5A051A7A15DDCE9D2E59A29C /* UserDictionary.swift in Sources */,
-				46F5F3A377D347829B8E04AF /* WordBuffer.swift in Sources */,
-				4F5547F5D83DD173A6E3367E /* WordBufferTests.swift in Sources */,
+				176107AE988B1737C2C673C1 /* GrammarlyRewritePlanner.swift in Sources */,
+				3B61B4CC47354DFD3785A7B8 /* GrammarlyRewritePlannerTests.swift in Sources */,
+				B034A1D8121367E6BFDC6FAA /* SecurityAndSettingsTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -349,30 +270,23 @@
 				82F55A9228CEA2D272E11F47 /* AppViewModel.swift in Sources */,
 				E4A982EDDD503D59E3BA4E90 /* ContentView.swift in Sources */,
 				3E96EA5EF2C443A1913099E7 /* DraggableFloatingPanel.swift in Sources */,
-				3B10431B759888AE08871302 /* EasySwitchDecisionEngine.swift in Sources */,
-				48245078D5F58FBDF5FF8170 /* EasySwitchManager.swift in Sources */,
-				72519CCCED048AC22DCB0623 /* EasySwitchSettings.swift in Sources */,
 				486DE7B0517C7538FBEE17E8 /* FloatingButtonView.swift in Sources */,
-				3F7C0B1A9E2D4C6B8A1F5E30 /* GrammarlyRewritePlanner.swift in Sources */,
 				AA8B0863398E255BDCF66DDE /* FloatingHelperController.swift in Sources */,
+				7DABCA309A6C1978537546FA /* GrammarlyRewritePlanner.swift in Sources */,
 				16A1AD437ED20C62601BBBC8 /* InlineRewritePanelController.swift in Sources */,
 				A8EAFF5A91AD75479D3AD02D /* InlineRewriteView.swift in Sources */,
 				C2A6A78088D1B9765015F188 /* InlineRewriteViewModel.swift in Sources */,
-				D2FBA0FFA646B9F69A5189C2 /* KeyboardLayoutMapper.swift in Sources */,
+				F0B5D4AF1598B8AA952BAFB5 /* KeyboardInputSource.swift in Sources */,
 				026AE038C3CC7104C457F4BC /* KeychainHelper.swift in Sources */,
-				E02C27F599C94B03453B8BA3 /* LanguageScorer.swift in Sources */,
 				C196E96AD4B703765CB5CA65 /* MarkerViews.swift in Sources */,
 				FCADB3D2438B0EA37C9F0AC8 /* Models.swift in Sources */,
-				8B3BA22F61CA18A86D3F35EC /* ReplacementService.swift in Sources */,
-				01A1B2C3D4E5F60718293A11 /* SelectionAssistantController.swift in Sources */,
-				01A1B2C3D4E5F60718293A12 /* SelectionAssistantSettings.swift in Sources */,
-				01A1B2C3D4E5F60718293A13 /* SelectionAssistantViewModel.swift in Sources */,
-				01A1B2C3D4E5F60718293A14 /* SelectionToolbarView.swift in Sources */,
+				9821610AB0F68301987A6BBD /* SelectionAssistantController.swift in Sources */,
+				261DA278842242F8F6CAFC24 /* SelectionAssistantSettings.swift in Sources */,
+				2FE03D1B9748B4C23028CD66 /* SelectionAssistantViewModel.swift in Sources */,
+				90EFED5ED4A2F5D1365178DB /* SelectionToolbarView.swift in Sources */,
 				1BC6850DC9195C1BBBE7E7E4 /* TextAccessService.swift in Sources */,
 				A315AADAD3FB2D3F434A2BC3 /* TextoraApp.swift in Sources */,
 				170DAD722EF2B9AE0A74E034 /* TextoraAppDelegate.swift in Sources */,
-				A390F23EEE260C85FD88744B /* UserDictionary.swift in Sources */,
-				2FBB3A9C8AEE87B4D03E6535 /* WordBuffer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -391,17 +305,16 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Sources/Textora.entitlements;
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = "";
-				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 35Q2T38T7Q;
 				INFOPLIST_FILE = Sources/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Textora;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "";
+				PRODUCT_BUNDLE_IDENTIFIER = com.textora.app;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -411,7 +324,6 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -458,11 +370,9 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -474,11 +384,9 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.textora.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
@@ -489,42 +397,20 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				AUTOMATION_APPLE_EVENTS = NO;
-				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
+				CODE_SIGN_ENTITLEMENTS = Sources/Textora.entitlements;
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
-				"DEVELOPMENT_TEAM[sdk=macosx*]" = 35Q2T38T7Q;
+				DEVELOPMENT_TEAM = 35Q2T38T7Q;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
-				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
-				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
-				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
-				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
-				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
-				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
-				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
-				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
-				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = NO;
 				INFOPLIST_FILE = Sources/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Textora;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "";
-				"MARKETING_VERSION[sdk=macosx*]" = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.textora.app;
-				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
-				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
-				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
-				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
-				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
-				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -563,11 +449,9 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -585,11 +469,10 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
-				ONLY_ACTIVE_ARCH = NO;
+				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.textora.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -601,7 +484,6 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

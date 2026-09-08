@@ -1,30 +1,26 @@
 import AppKit
+import Carbon
 import Foundation
 
 @MainActor
 final class AppViewModel: ObservableObject {
+    enum OnboardingInterfaceMode {
+        case toolbox
+        case floatingIcon
+        case hotKeys
+    }
+
     enum SettingsKeys {
         static let detailedCorrectionsEnabled = "overlay.detailedCorrections.enabled"
         static let smartAIEnabled = "overlay.smartAI.enabled"
         static let selectionAssistantBetaEnabled = SelectionAssistantSettings.Keys.enabled
         static let toolboxEnabled = SelectionAssistantSettings.Keys.toolboxEnabled
         static let floatingIconEnabled = SelectionAssistantSettings.Keys.floatingIconEnabled
-        static let selectionAssistantDiagnosticsEnabled = SelectionAssistantSettings.Keys.diagnosticsEnabled
-        static let easySwitchEnabled = EasySwitchSettings.Keys.enabled
-        static let easySwitchAutoCorrectWrongLayout = EasySwitchSettings.Keys.autoCorrectWrongLayout
-        static let easySwitchChangesKeyboardLayout = EasySwitchSettings.Keys.changesKeyboardLayout
-        static let easySwitchMinimumWordLength = EasySwitchSettings.Keys.minimumWordLength
-        static let easySwitchConfidenceThreshold = EasySwitchSettings.Keys.confidenceThreshold
-        static let easySwitchDifferenceThreshold = EasySwitchSettings.Keys.differenceThreshold
-        static let easySwitchEnglishEnabled = EasySwitchSettings.Keys.englishEnabled
-        static let easySwitchRussianEnabled = EasySwitchSettings.Keys.russianEnabled
-        static let easySwitchShowCorrectionNotification = EasySwitchSettings.Keys.showCorrectionNotification
-        static let easySwitchPlaySoundOnCorrection = EasySwitchSettings.Keys.playSoundOnCorrection
-        static let easySwitchPrivacyMode = EasySwitchSettings.Keys.privacyMode
+        static let selectionActivationMode = SelectionAssistantSettings.Keys.activationMode
     }
 
     private enum OnboardingDefaults {
-        static let completedKey = "onboarding.byok.completed"
+        static let completedKey = "onboarding.byok.completed.v2"
         static let skippedKey = "onboarding.byok.skipped"
     }
 
@@ -36,7 +32,18 @@ final class AppViewModel: ObservableObject {
 
     @Published var originalText = ""
     @Published var rewrittenText = ""
-    @Published var operation: RewriteOperation = .fixGrammar
+    @Published var operation: RewriteOperation = .fixGrammar {
+        didSet {
+            guard !isReloadingFromDefaults, oldValue != operation else { return }
+            SelectionAssistantSettings.setSelectedOperation(operation)
+        }
+    }
+    @Published var translationLanguage: TranslationLanguage = .english {
+        didSet {
+            guard !isReloadingFromDefaults, oldValue != translationLanguage else { return }
+            SelectionAssistantSettings.setTranslationLanguage(translationLanguage)
+        }
+    }
     @Published var isLoading = false
     @Published var errorText = ""
 
@@ -88,25 +95,24 @@ final class AppViewModel: ObservableObject {
             SelectionAssistantSettings.setFloatingIconEnabled(floatingIconEnabled)
         }
     }
-    @Published var selectionAssistantDiagnosticsEnabled: Bool = false {
+    @Published var selectionActivationMode: SelectionActivationMode = .automatic {
         didSet {
-            guard !isReloadingFromDefaults else { return }
-            guard oldValue != selectionAssistantDiagnosticsEnabled else { return }
-            SelectionAssistantSettings.setDiagnosticsEnabled(selectionAssistantDiagnosticsEnabled)
+            guard !isReloadingFromDefaults, oldValue != selectionActivationMode else { return }
+            SelectionAssistantSettings.setActivationMode(selectionActivationMode)
         }
     }
-    @Published var easySwitchEnabled: Bool = false
-    @Published var easySwitchAutoCorrectWrongLayout: Bool = true
-    @Published var easySwitchChangesKeyboardLayout: Bool = false
-    @Published var easySwitchMinimumWordLength: Int = 3
-    @Published var easySwitchConfidenceThreshold: Double = 0.65
-    @Published var easySwitchDifferenceThreshold: Double = 0.35
-    @Published var easySwitchEnglishEnabled: Bool = true
-    @Published var easySwitchRussianEnabled: Bool = true
-    @Published var easySwitchShowCorrectionNotification: Bool = true
-    @Published var easySwitchPlaySoundOnCorrection: Bool = false
-    @Published var easySwitchPrivacyMode: Bool = false
-    @Published var easySwitchWhitelistText: String = ""
+    @Published var rewriteHotKey = TextoraHotKey(keyCode: 15, modifiers: UInt32(cmdKey | optionKey), isEnabled: true) {
+        didSet {
+            guard !isReloadingFromDefaults, oldValue != rewriteHotKey else { return }
+            SelectionAssistantSettings.setHotKey(rewriteHotKey, for: .rewrite)
+        }
+    }
+    @Published var translateHotKey = TextoraHotKey(keyCode: 17, modifiers: UInt32(cmdKey | optionKey), isEnabled: true) {
+        didSet {
+            guard !isReloadingFromDefaults, oldValue != translateHotKey else { return }
+            SelectionAssistantSettings.setHotKey(translateHotKey, for: .translate)
+        }
+    }
     @Published var onboardingStep: Int = 1
     @Published var onboardingErrorText: String = ""
     @Published var isOnboardingBusy: Bool = false
@@ -146,7 +152,6 @@ final class AppViewModel: ObservableObject {
     func reloadFromUserDefaults() {
         isReloadingFromDefaults = true
         defer { isReloadingFromDefaults = false }
-        EasySwitchSettings.registerDefaults()
         SelectionAssistantSettings.registerDefaults()
         provider = AIProvider(rawValue: UserDefaults.standard.string(forKey: "provider") ?? "openai") ?? .openai
         model = storedModelForCurrentProvider()
@@ -159,20 +164,11 @@ final class AppViewModel: ObservableObject {
         selectionAssistantBetaEnabled = UserDefaults.standard.bool(forKey: SettingsKeys.selectionAssistantBetaEnabled)
         toolboxEnabled = UserDefaults.standard.bool(forKey: SettingsKeys.toolboxEnabled)
         floatingIconEnabled = UserDefaults.standard.bool(forKey: SettingsKeys.floatingIconEnabled)
-        selectionAssistantDiagnosticsEnabled = UserDefaults.standard.bool(forKey: SettingsKeys.selectionAssistantDiagnosticsEnabled)
-        easySwitchEnabled = UserDefaults.standard.bool(forKey: SettingsKeys.easySwitchEnabled)
-        easySwitchAutoCorrectWrongLayout = UserDefaults.standard.bool(forKey: SettingsKeys.easySwitchAutoCorrectWrongLayout)
-        easySwitchChangesKeyboardLayout = UserDefaults.standard.bool(forKey: SettingsKeys.easySwitchChangesKeyboardLayout)
-        easySwitchMinimumWordLength = max(1, UserDefaults.standard.integer(forKey: SettingsKeys.easySwitchMinimumWordLength))
-        easySwitchConfidenceThreshold = UserDefaults.standard.double(forKey: SettingsKeys.easySwitchConfidenceThreshold)
-        easySwitchDifferenceThreshold = UserDefaults.standard.double(forKey: SettingsKeys.easySwitchDifferenceThreshold)
-        easySwitchEnglishEnabled = UserDefaults.standard.bool(forKey: SettingsKeys.easySwitchEnglishEnabled)
-        easySwitchRussianEnabled = UserDefaults.standard.bool(forKey: SettingsKeys.easySwitchRussianEnabled)
-        easySwitchShowCorrectionNotification = UserDefaults.standard.bool(forKey: SettingsKeys.easySwitchShowCorrectionNotification)
-        easySwitchPlaySoundOnCorrection = UserDefaults.standard.bool(forKey: SettingsKeys.easySwitchPlaySoundOnCorrection)
-        easySwitchPrivacyMode = UserDefaults.standard.bool(forKey: SettingsKeys.easySwitchPrivacyMode)
-        let easySwitchDictionary = UserDictionary()
-        easySwitchWhitelistText = easySwitchDictionary.protectedWords().sorted().joined(separator: ", ")
+        selectionActivationMode = SelectionAssistantSettings.activationMode()
+        operation = SelectionAssistantSettings.selectedOperation()
+        translationLanguage = SelectionAssistantSettings.translationLanguage()
+        rewriteHotKey = SelectionAssistantSettings.hotKey(for: .rewrite)
+        translateHotKey = SelectionAssistantSettings.hotKey(for: .translate)
         hasAccessibilityPermission = textService.hasAccessibilityPermission()
         refreshAppConsents()
     }
@@ -293,7 +289,8 @@ final class AppViewModel: ObservableObject {
         }
     }
 
-    func saveSettings() {
+    @discardableResult
+    func saveSettings() -> Bool {
         UserDefaults.standard.set(provider.rawValue, forKey: "provider")
         let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
         UserDefaults.standard.set(trimmedModel, forKey: provider.modelUserDefaultsKey)
@@ -305,33 +302,27 @@ final class AppViewModel: ObservableObject {
         SelectionAssistantSettings.setEnabled(true)
         UserDefaults.standard.set(toolboxEnabled, forKey: SettingsKeys.toolboxEnabled)
         UserDefaults.standard.set(floatingIconEnabled, forKey: SettingsKeys.floatingIconEnabled)
-        UserDefaults.standard.set(selectionAssistantDiagnosticsEnabled, forKey: SettingsKeys.selectionAssistantDiagnosticsEnabled)
-        UserDefaults.standard.set(easySwitchEnabled, forKey: SettingsKeys.easySwitchEnabled)
-        UserDefaults.standard.set(easySwitchAutoCorrectWrongLayout, forKey: SettingsKeys.easySwitchAutoCorrectWrongLayout)
-        UserDefaults.standard.set(easySwitchChangesKeyboardLayout, forKey: SettingsKeys.easySwitchChangesKeyboardLayout)
-        UserDefaults.standard.set(max(1, easySwitchMinimumWordLength), forKey: SettingsKeys.easySwitchMinimumWordLength)
-        UserDefaults.standard.set(easySwitchConfidenceThreshold, forKey: SettingsKeys.easySwitchConfidenceThreshold)
-        UserDefaults.standard.set(easySwitchDifferenceThreshold, forKey: SettingsKeys.easySwitchDifferenceThreshold)
-        UserDefaults.standard.set(easySwitchEnglishEnabled, forKey: SettingsKeys.easySwitchEnglishEnabled)
-        UserDefaults.standard.set(easySwitchRussianEnabled, forKey: SettingsKeys.easySwitchRussianEnabled)
-        UserDefaults.standard.set(easySwitchShowCorrectionNotification, forKey: SettingsKeys.easySwitchShowCorrectionNotification)
-        UserDefaults.standard.set(easySwitchPlaySoundOnCorrection, forKey: SettingsKeys.easySwitchPlaySoundOnCorrection)
-        UserDefaults.standard.set(easySwitchPrivacyMode, forKey: SettingsKeys.easySwitchPrivacyMode)
-        let whitelist = easySwitchWhitelistText
-            .split { $0.isWhitespace || $0 == "," || $0 == ";" || $0 == "\n" }
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-            .filter { !$0.isEmpty }
-        let protectedWords = Array(Set(whitelist)).sorted()
-        UserDefaults.standard.set(protectedWords, forKey: "easySwitch.userDictionary.whitelist")
-        UserDefaults.standard.set([], forKey: "easySwitch.userDictionary.ignoredWords")
-        NotificationCenter.default.post(name: EasySwitchManager.settingsDidChangeNotification, object: nil)
+        UserDefaults.standard.set(selectionActivationMode.rawValue, forKey: SettingsKeys.selectionActivationMode)
+        SelectionAssistantSettings.setSelectedOperation(operation)
+        SelectionAssistantSettings.setTranslationLanguage(translationLanguage)
         NotificationCenter.default.post(name: SelectionAssistantSettings.settingsDidChangeNotification, object: nil)
-        KeychainHelper.saveAll(
-            openAI: openAIKey,
-            gemini: geminiKey,
-            claude: claudeKey,
-            custom: customToken
-        )
+        let keyResult: Result<Void, KeychainHelper.KeychainError>
+        switch provider {
+        case .openai:
+            keyResult = KeychainHelper.save(key: KeychainHelper.openAIKeyAccount, value: openAIKey)
+        case .gemini:
+            keyResult = KeychainHelper.save(key: KeychainHelper.geminiKeyAccount, value: geminiKey)
+        case .claude:
+            keyResult = KeychainHelper.save(key: KeychainHelper.claudeKeyAccount, value: claudeKey)
+        case .other:
+            keyResult = KeychainHelper.save(key: KeychainHelper.customTokenAccount, value: customToken)
+        }
+        if case .failure(let error) = keyResult {
+            errorText = error.localizedDescription
+            onboardingErrorText = error.localizedDescription
+            return false
+        }
+        return true
     }
 
     var shouldShowOnboarding: Bool {
@@ -349,19 +340,11 @@ final class AppViewModel: ObservableObject {
             customOpenAIBaseURL,
             String(toolboxEnabled),
             String(floatingIconEnabled),
-            String(selectionAssistantDiagnosticsEnabled),
-            String(easySwitchEnabled),
-            String(easySwitchAutoCorrectWrongLayout),
-            String(easySwitchChangesKeyboardLayout),
-            String(easySwitchMinimumWordLength),
-            String(format: "%.3f", easySwitchConfidenceThreshold),
-            String(format: "%.3f", easySwitchDifferenceThreshold),
-            String(easySwitchEnglishEnabled),
-            String(easySwitchRussianEnabled),
-            easySwitchWhitelistText,
-            String(easySwitchShowCorrectionNotification),
-            String(easySwitchPlaySoundOnCorrection),
-            String(easySwitchPrivacyMode)
+            selectionActivationMode.rawValue,
+            operation.rawValue,
+            translationLanguage.rawValue,
+            String(rewriteHotKey.keyCode), String(rewriteHotKey.modifiers), String(rewriteHotKey.isEnabled),
+            String(translateHotKey.keyCode), String(translateHotKey.modifiers), String(translateHotKey.isEnabled)
         ].joined(separator: "\u{1F}")
     }
 
@@ -379,12 +362,47 @@ final class AppViewModel: ObservableObject {
         onboardingStep = min(5, onboardingStep + 1)
     }
 
-    func completeOnboarding() {
-        isOnboardingComplete = true
+    var onboardingInterfaceMode: OnboardingInterfaceMode {
+        if selectionActivationMode == .hotkeyOnly { return .hotKeys }
+        return toolboxEnabled ? .toolbox : .floatingIcon
+    }
+
+    var hasValidOnboardingInterfaceSelection: Bool {
+        switch onboardingInterfaceMode {
+        case .hotKeys:
+            return rewriteHotKey.isEnabled || translateHotKey.isEnabled
+        case .toolbox, .floatingIcon:
+            return toolboxEnabled || floatingIconEnabled
+        }
+    }
+
+    func selectOnboardingInterfaceMode(_ mode: OnboardingInterfaceMode) {
+        switch mode {
+        case .toolbox:
+            selectionActivationMode = .automatic
+            toolboxEnabled = true
+            floatingIconEnabled = false
+        case .floatingIcon:
+            selectionActivationMode = .automatic
+            toolboxEnabled = false
+            floatingIconEnabled = true
+        case .hotKeys:
+            selectionActivationMode = .hotkeyOnly
+            toolboxEnabled = false
+            floatingIconEnabled = false
+            rewriteHotKey.isEnabled = true
+            translateHotKey.isEnabled = true
+        }
+    }
+
+    @discardableResult
+    func completeOnboarding() -> Bool {
         onboardingErrorText = ""
-        saveSettings()
+        guard saveSettings() else { return false }
+        isOnboardingComplete = true
         UserDefaults.standard.set(true, forKey: OnboardingDefaults.completedKey)
         UserDefaults.standard.removeObject(forKey: OnboardingDefaults.skippedKey)
+        return true
     }
 
     func prepareOnboardingSession() {
@@ -427,7 +445,7 @@ final class AppViewModel: ObservableObject {
         }
         isOnboardingBusy = true
         defer { isOnboardingBusy = false }
-        saveSettings()
+        guard saveSettings() else { return false }
         do {
             _ = try await aiClient.rewriteText(
                 provider: provider,
@@ -480,6 +498,12 @@ final class AppViewModel: ObservableObject {
         }
         autoSaveTask = task
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: task)
+    }
+
+    func flushPendingSave() {
+        autoSaveTask?.cancel()
+        autoSaveTask = nil
+        _ = saveSettings()
     }
 
     private func defaultModel(for provider: AIProvider) -> String {

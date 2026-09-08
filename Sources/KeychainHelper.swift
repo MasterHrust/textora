@@ -2,9 +2,28 @@ import Foundation
 import Security
 
 enum KeychainHelper {
+    enum KeychainError: LocalizedError, Equatable {
+        case security(OSStatus)
+        case invalidData
+        case verificationFailed
+
+        var errorDescription: String? {
+            switch self {
+            case .security(let status):
+                if status == errSecMissingEntitlement {
+                    return "Secure storage is unavailable because this build is not signed correctly."
+                }
+                return "Could not access secure storage (\(status))."
+            case .invalidData:
+                return "Secure storage contains invalid data."
+            case .verificationFailed:
+                return "The API key could not be verified after saving."
+            }
+        }
+    }
+
     private static let service = Bundle.main.bundleIdentifier ?? "com.textora.app"
     private static let account = "apiTokens"
-    private static let legacyService = "io.fixness.app"
 
     private static var cache: [String: String] = [:]
     private static var cacheLoaded = false
@@ -16,101 +35,102 @@ enum KeychainHelper {
 
     // MARK: - Public API
 
-    static func save(key: String, value: String) {
+    @discardableResult
+    static func save(key: String, value: String) -> Result<Void, KeychainError> {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        cache[key] = trimmed
-        persistCache()
+        func updated(_ values: [String: String]) -> [String: String] {
+            var next = values
+            if trimmed.isEmpty { next.removeValue(forKey: key) } else { next[key] = trimmed }
+            return next
+        }
+
+        let loaded = loadAll()
+        guard case .success(let current) = loaded else {
+            if case .failure(let error) = loaded { return .failure(error) }
+            return .failure(.invalidData)
+        }
+        let currentValue = current[key]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard currentValue != trimmed else { return .success(()) }
+        return persist(updated(current))
     }
 
     static func read(key: String) -> String? {
-        loadCacheIfNeeded()
-        let val = cache[key] ?? ""
-        return val.isEmpty ? nil : val
+        try? load(key: key).get()
     }
 
-    static func delete(key: String) {
-        cache[key] = ""
-        persistCache()
-    }
-
-    /// Batch-save all provider tokens in a single Keychain write.
-    static func saveAll(openAI: String, gemini: String, claude: String, custom: String) {
-        cache[openAIKeyAccount] = openAI.trimmingCharacters(in: .whitespacesAndNewlines)
-        cache[geminiKeyAccount] = gemini.trimmingCharacters(in: .whitespacesAndNewlines)
-        cache[claudeKeyAccount] = claude.trimmingCharacters(in: .whitespacesAndNewlines)
-        cache[customTokenAccount] = custom.trimmingCharacters(in: .whitespacesAndNewlines)
-        persistCache()
-    }
-
-    /// Read all tokens into memory. Call once after onboarding / accessibility wizard completes.
-    static func warmUpCache() {
-        guard !cacheLoaded else { return }
-        cacheLoaded = true
-        if let dict = readBlob() {
-            cache = dict
+    static func load(key: String) -> Result<String?, KeychainError> {
+        loadAll().map { values in
+            let value = values[key]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return value.isEmpty ? nil : value
         }
+    }
+
+    @discardableResult
+    static func delete(key: String) -> Result<Void, KeychainError> {
+        save(key: key, value: "")
+    }
+
+    @discardableResult
+    static func warmUpCache() -> Result<Void, KeychainError> {
+        loadAll().map { _ in () }
     }
 
     // MARK: - Migration (one-time: old keychain / UserDefaults / file → Data Protection Keychain)
 
-    static func migrateIfNeeded() {
+    @discardableResult
+    static func migrateIfNeeded() -> Result<Void, KeychainError> {
         let migrated = UserDefaults.standard.bool(forKey: "tokens.dp.migrated")
-        guard !migrated else { return }
+        guard !migrated else { return warmUpCache() }
 
-        #if DEBUG
-        // 1. Old single-blob entry in the legacy keychain (v2).
-        // Development-only: release builds must not import tokens from
-        // another app/service name.
-        if let dict = readLegacyBlob() {
-            for (k, v) in dict where !v.isEmpty {
-                cache[k] = v
-            }
-            deleteLegacyBlob()
+        let modern = loadAll()
+        guard case .success(var migratedValues) = modern else {
+            if case .failure(let error) = modern { return .failure(error) }
+            return .failure(.invalidData)
         }
+        var legacyDefaultsKeys: [String] = []
+        var shouldRemoveLegacyFile = false
 
-        // 2. Old per-key entries in the legacy keychain (v1).
-        for key in [openAIKeyAccount, geminiKeyAccount, claudeKeyAccount, customTokenAccount] {
-            if let val = readLegacyEntry(key: key), !val.isEmpty {
-                if (cache[key] ?? "").isEmpty { cache[key] = val }
-                deleteLegacyEntry(key: key)
-            }
-        }
-        #endif
+        // Legacy keychain services are not probed automatically. Their ACL can
+        // show password dialogs for an older app identity during every launch.
 
-        // 3. Very old UserDefaults storage for the current bundle.
+        // 1. Very old UserDefaults storage for the current bundle.
         for key in [openAIKeyAccount, geminiKeyAccount, claudeKeyAccount, customTokenAccount] {
             if let val = UserDefaults.standard.string(forKey: key), !val.isEmpty {
-                if (cache[key] ?? "").isEmpty { cache[key] = val }
-                UserDefaults.standard.removeObject(forKey: key)
+                if migratedValues[key]?.isEmpty != false { migratedValues[key] = val }
+                legacyDefaultsKeys.append(key)
             }
         }
 
-        // 4. Intermediate file-based storage (tokens.json).
+        // 2. Intermediate file-based storage (tokens.json).
         #if DEBUG
         if let fileTokens = readFromFile() {
             for (k, v) in fileTokens where !v.isEmpty {
-                if (cache[k] ?? "").isEmpty { cache[k] = v }
+                if migratedValues[k]?.isEmpty != false { migratedValues[k] = v }
             }
-            removeTokensFile()
+            shouldRemoveLegacyFile = true
         }
         #else
         removeTokensFile()
         #endif
 
-        if cache.values.contains(where: { !$0.isEmpty }) {
-            persistCache()
+        if !migratedValues.isEmpty {
+            if case .failure(let error) = persist(migratedValues) { return .failure(error) }
         }
 
-        cacheLoaded = true
+        #if DEBUG
+        if shouldRemoveLegacyFile { removeTokensFile() }
+        #endif
+        legacyDefaultsKeys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
         UserDefaults.standard.set(true, forKey: "tokens.dp.migrated")
         UserDefaults.standard.set(true, forKey: "tokens.file.migrated")
         UserDefaults.standard.set(true, forKey: "keychain.migrated.v2")
         UserDefaults.standard.set(true, forKey: "keychain.migrated")
+        return .success(())
     }
 
     // MARK: - Data Protection Keychain (modern, no system prompts)
 
-    private static var baseQuery: [String: Any] {
+    private static func baseQuery() -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -119,107 +139,62 @@ enum KeychainHelper {
         ]
     }
 
-    private static func loadCacheIfNeeded() {
-        guard !cacheLoaded else { return }
-        warmUpCache()
-    }
-
-    private static func readBlob() -> [String: String]? {
-        // Try Data Protection Keychain first (modern, no prompts).
-        var query = baseQuery
+    private static func loadAll() -> Result<[String: String], KeychainError> {
+        if cacheLoaded { return .success(cache) }
+        var query = baseQuery()
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
-        if status == errSecSuccess, let data = item as? Data,
-           let dict = try? JSONDecoder().decode([String: String].self, from: data) {
-            return dict
+        if status == errSecItemNotFound {
+            cache = [:]
+            cacheLoaded = true
+            return .success([:])
         }
-        #if DEBUG
-        // Data Protection Keychain unavailable in unsigned/dev builds — try file fallback.
-        return readFromFile()
-        #else
-        return nil
-        #endif
+        guard status == errSecSuccess else { return .failure(.security(status)) }
+        guard let data = item as? Data,
+              let dict = try? JSONDecoder().decode([String: String].self, from: data) else {
+            return .failure(.invalidData)
+        }
+        cache = dict
+        cacheLoaded = true
+        return .success(dict)
     }
 
-    private static func persistCache() {
-        let nonEmpty = cache.filter { !$0.value.isEmpty }
-        SecItemDelete(baseQuery as CFDictionary)
-        guard !nonEmpty.isEmpty, let data = try? JSONEncoder().encode(nonEmpty) else {
-            removeTokensFile()
-            return
+    private static func persist(_ values: [String: String]) -> Result<Void, KeychainError> {
+        let nonEmpty = values.filter { !$0.value.isEmpty }
+        if nonEmpty.isEmpty {
+            let status = SecItemDelete(baseQuery() as CFDictionary)
+            guard status == errSecSuccess || status == errSecItemNotFound else {
+                return .failure(.security(status))
+            }
+            cache = [:]
+            cacheLoaded = true
+            return .success(())
         }
-        var add = baseQuery
-        add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        let addStatus = SecItemAdd(add as CFDictionary, nil)
-        if addStatus == errSecSuccess {
-            removeTokensFile()
+        guard let data = try? JSONEncoder().encode(nonEmpty) else { return .failure(.invalidData) }
+        let updateStatus = SecItemUpdate(
+            baseQuery() as CFDictionary,
+            [kSecValueData as String: data] as CFDictionary
+        )
+        let status: OSStatus
+        if updateStatus == errSecItemNotFound {
+            var add = baseQuery()
+            add[kSecValueData as String] = data
+            add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+            status = SecItemAdd(add as CFDictionary, nil)
         } else {
-            #if DEBUG
-            // Data Protection Keychain write failed (missing entitlement / unsigned build).
-            // Persist to Application Support file in dev only so tokens survive restart.
-            writeToFile(nonEmpty)
-            #else
-            removeTokensFile()
-            #endif
+            status = updateStatus
         }
-    }
+        guard status == errSecSuccess else { return .failure(.security(status)) }
 
-    private static func writeToFile(_ dict: [String: String]) {
-        let dir = tokensFileURL.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        guard let data = try? JSONEncoder().encode(dict) else { return }
-        try? data.write(to: tokensFileURL, options: .atomic)
-    }
-
-    // MARK: - Legacy file-based keychain (for migration only — triggers prompts)
-
-    private static func readLegacyBlob() -> [String: String]? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: legacyService,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status == errSecSuccess, let data = item as? Data else { return nil }
-        return try? JSONDecoder().decode([String: String].self, from: data)
-    }
-
-    private static func deleteLegacyBlob() {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: legacyService,
-            kSecAttrAccount as String: account
-        ]
-        SecItemDelete(query as CFDictionary)
-    }
-
-    private static func readLegacyEntry(key: String) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: legacyService,
-            kSecAttrAccount as String: key,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status == errSecSuccess, let data = item as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
-    private static func deleteLegacyEntry(key: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: legacyService,
-            kSecAttrAccount as String: key
-        ]
-        SecItemDelete(query as CFDictionary)
+        cacheLoaded = false
+        guard case .success(let verified) = loadAll(), verified == nonEmpty else {
+            cacheLoaded = false
+            return .failure(.verificationFailed)
+        }
+        removeTokensFile()
+        return .success(())
     }
 
     // MARK: - File-based storage (intermediate format, for migration only)

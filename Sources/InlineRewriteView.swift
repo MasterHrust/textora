@@ -272,7 +272,6 @@ struct InlineRewriteView: View {
     let onActionInvoked: () -> Void
     let onSuggestionAvailabilityChanged: (Bool) -> Void
     @AppStorage(AppViewModel.SettingsKeys.smartAIEnabled) private var smartAIEnabled = true
-    @AppStorage(AppViewModel.SettingsKeys.easySwitchEnabled) private var easySwitchEnabled = true
 
     private var showSuggestionCard: Bool {
         !viewModel.noChangesNeeded && !viewModel.rewrittenText.isEmpty
@@ -404,27 +403,6 @@ struct InlineRewriteView: View {
                     if previousOperation == viewModel.operation {
                         viewModel.triggerRewrite(.operationChanged)
                     }
-                }
-
-                PopupFeatureToggleButton(
-                    isOn: easySwitchEnabled,
-                    systemImage: easySwitchEnabled ? "keyboard.fill" : "keyboard",
-                    label: "EasySwitch",
-                    accessibilityLabel: "EasySwitch",
-                    helpText: easySwitchEnabled
-                        ? "EasySwitch is paused while this pop-up is open. Close it to correct wrong EN/RU layout."
-                        : "EasySwitch is off: click to fix wrong English/Russian layout words while typing.",
-                    activeColors: [
-                        Color(red: 0.10, green: 0.72, blue: 0.58),
-                        Color(red: 0.16, green: 0.58, blue: 1.0)
-                    ],
-                    activeShadow: Color(red: 0.12, green: 0.72, blue: 0.66),
-                    isTemporarilyPaused: easySwitchEnabled
-                ) {
-                    easySwitchEnabled.toggle()
-                    UserDefaults.standard.set(easySwitchEnabled, forKey: AppViewModel.SettingsKeys.easySwitchEnabled)
-                    NotificationCenter.default.post(name: EasySwitchManager.settingsDidChangeNotification, object: nil)
-                    AppCoordinator.shared.applyEasySwitchSettingsNow(forceRestart: false)
                 }
 
                 Button(action: onClose) {

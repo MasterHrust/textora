@@ -82,8 +82,6 @@ final class FloatingHelperController {
     private var timer: Timer?
     private var isRunning = false
     private var workspaceActivationObserver: NSObjectProtocol?
-    private var easySwitchBeginObserver: NSObjectProtocol?
-    private var easySwitchEndObserver: NSObjectProtocol?
     private let onRewriteTap: (CGRect) -> Void
     private let onFloatingHoverChanged: (Bool, CGRect) -> Void
     private var lastFrame: CGRect = .zero
@@ -104,7 +102,6 @@ final class FloatingHelperController {
     private let idleDelay: TimeInterval = 1.0
     private let sentenceDelay: TimeInterval = 1.0
     private var suppressAutoEvaluationUntil: Date?
-    private var easySwitchMutationSuppressedUntil: Date?
     /// Debounces AI auto-check by focused **text** (caret moves change `focusedTextSignature` but not this segment).
     private var lastCheckedValueSegment: String?
     /// Guards the AI path by the actual context text. Some Chrome surfaces
@@ -252,12 +249,6 @@ final class FloatingHelperController {
         if let workspaceActivationObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(workspaceActivationObserver)
         }
-        if let easySwitchBeginObserver {
-            NotificationCenter.default.removeObserver(easySwitchBeginObserver)
-        }
-        if let easySwitchEndObserver {
-            NotificationCenter.default.removeObserver(easySwitchEndObserver)
-        }
         timer?.invalidate()
     }
 
@@ -404,7 +395,6 @@ final class FloatingHelperController {
         RunLoop.main.add(newTimer, forMode: .common)
         timer = newTimer
         installWorkspaceActivationObserverIfNeeded()
-        installEasySwitchMutationObserversIfNeeded()
         updateVisibilityAndPosition()
     }
 
@@ -434,28 +424,6 @@ final class FloatingHelperController {
         ) { [weak self] notification in
             Task { @MainActor [weak self] in
                 self?.handleWorkspaceDidActivate(notification)
-            }
-        }
-    }
-
-    private func installEasySwitchMutationObserversIfNeeded() {
-        guard easySwitchBeginObserver == nil, easySwitchEndObserver == nil else { return }
-        easySwitchBeginObserver = NotificationCenter.default.addObserver(
-            forName: EasySwitchManager.replacementDidBeginNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.beginEasySwitchMutationSuppression()
-            }
-        }
-        easySwitchEndObserver = NotificationCenter.default.addObserver(
-            forName: EasySwitchManager.replacementDidEndNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.extendEasySwitchMutationSuppression()
             }
         }
     }
@@ -491,41 +459,6 @@ final class FloatingHelperController {
             guard let self, self.isRunning, !self.isEvaluating, !self.isDragging else { return }
             self.evaluateCurrentText()
         }
-    }
-
-    private func beginEasySwitchMutationSuppression() {
-        easySwitchMutationSuppressedUntil = Date().addingTimeInterval(1.2)
-        resetSuggestionStateForProgrammaticMutation()
-        postStatus("EasySwitch is applying correction")
-    }
-
-    private func extendEasySwitchMutationSuppression() {
-        easySwitchMutationSuppressedUntil = Date().addingTimeInterval(0.75)
-        resetSuggestionStateForProgrammaticMutation()
-        postStatus("EasySwitch correction applied")
-    }
-
-    private func isEasySwitchMutationSuppressed() -> Bool {
-        guard let until = easySwitchMutationSuppressedUntil else { return false }
-        if Date() <= until { return true }
-        easySwitchMutationSuppressedUntil = nil
-        return false
-    }
-
-    private func resetSuggestionStateForProgrammaticMutation() {
-        lastSignature = nil
-        lastCheckedValueSegment = nil
-        latestSignature = nil
-        postApplyAcceptedValueSegment = nil
-        latestSuggestion = ""
-        latestSuggestionOptions = []
-        latestIssueRange = nil
-        latestIssues = []
-        hoveredIssueID = nil
-        hoveredIssueIDs = []
-        suggestionState = .neutral
-        hideMarkerAndCard()
-        updateRingColor()
     }
 
     private func createPanel() {
@@ -651,10 +584,6 @@ final class FloatingHelperController {
             return
         }
         syncRuntimeSettingsIfNeeded()
-        if isEasySwitchMutationSuppressed() {
-            postStatus("Waiting for EasySwitch correction")
-            return
-        }
         guard textService.hasAccessibilityPermission() else {
             postStatus("No accessibility permission")
             cancelScheduledVisibilityDrop()
@@ -1530,10 +1459,6 @@ final class FloatingHelperController {
 
     private func evaluateCurrentText() {
         guard !isEvaluating else { return }
-        guard !isEasySwitchMutationSuppressed() else {
-            textoraDiagLog("aiRewrite", "skip evaluation: EasySwitch mutation in progress")
-            return
-        }
         isEvaluating = true
         updateRingColor()
         onEvaluationStarted?()

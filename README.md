@@ -101,7 +101,7 @@ You can grant access in macOS Settings under:
 
 ## Privacy
 
-- API keys are stored locally (Keychain; file fallback is used only when Keychain write is unavailable in dev-like environments).
+- API keys are stored locally in the Data Protection Keychain. Textora never falls back to the legacy login keychain.
 - Textora does not route your data through an app-owned backend in this repository.
 - Your provider's data policies and terms apply when using their API.
 

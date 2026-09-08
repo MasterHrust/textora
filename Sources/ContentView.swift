@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import SwiftUI
 
 struct ContentView: View {
@@ -28,8 +29,6 @@ struct ContentView: View {
             providerSection
             Divider().padding(.vertical, 4)
             interfaceSection
-            Divider().padding(.vertical, 4)
-            easySwitchSection
             Button("Save settings") {
                 viewModel.saveSettings()
             }
@@ -116,11 +115,34 @@ struct ContentView: View {
                 floatingIconEnabled: $viewModel.floatingIconEnabled,
                 compact: true
             )
-            Toggle("Enable Toolbox diagnostics log", isOn: $viewModel.selectionAssistantDiagnosticsEnabled)
-                .toggleStyle(.checkbox)
-            Text("Writes selection toolbar lifecycle details to /tmp/TextoraMarkerGeometry.log when troubleshooting.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            Picker("Show Textora", selection: $viewModel.selectionActivationMode) {
+                Text("Automatically").tag(SelectionActivationMode.automatic)
+                Text("Only with hotkeys").tag(SelectionActivationMode.hotkeyOnly)
+            }
+            .pickerStyle(.segmented)
+
+            HStack(spacing: 12) {
+                Picker("Rewrite profile", selection: $viewModel.operation) {
+                    ForEach(RewriteOperation.allCases) { operation in
+                        Text(operation.rawValue).tag(operation)
+                    }
+                }
+                Picker("Translation language", selection: $viewModel.translationLanguage) {
+                    ForEach(TranslationLanguage.allCases) { language in
+                        Text("\(language.flag) \(language.displayName)").tag(language)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                HotKeySettingRow(title: "Rewrite selected text", hotKey: $viewModel.rewriteHotKey)
+                HotKeySettingRow(title: "Translate selected text", hotKey: $viewModel.translateHotKey)
+            }
+            if let error = GlobalHotKeyManager.shared.registrationError {
+                Text(error)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+            }
         }
     }
 
@@ -235,56 +257,6 @@ struct ContentView: View {
         }
     }
 
-    private var easySwitchSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("EasySwitch")
-                .font(.headline)
-            Text("EasySwitch works fully on-device. It catches words typed in the wrong English/Russian keyboard layout and fixes them while you type.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Toggle("Enable EasySwitch", isOn: $viewModel.easySwitchEnabled)
-                .toggleStyle(.checkbox)
-            Toggle("Auto-correct wrong keyboard layout", isOn: $viewModel.easySwitchAutoCorrectWrongLayout)
-                .toggleStyle(.checkbox)
-                .disabled(!viewModel.easySwitchEnabled)
-            Toggle("Switch keyboard layout after correction", isOn: $viewModel.easySwitchChangesKeyboardLayout)
-                .toggleStyle(.checkbox)
-                .disabled(!viewModel.easySwitchEnabled)
-            Stepper(
-                "Minimum word length: \(viewModel.easySwitchMinimumWordLength)",
-                value: $viewModel.easySwitchMinimumWordLength,
-                in: 1...12
-            )
-            .disabled(!viewModel.easySwitchEnabled)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Confidence threshold: \(viewModel.easySwitchConfidenceThreshold, specifier: "%.2f")")
-                    .font(.caption)
-                Slider(value: $viewModel.easySwitchConfidenceThreshold, in: 0.4...0.95, step: 0.05)
-                Text("Difference threshold: \(viewModel.easySwitchDifferenceThreshold, specifier: "%.2f")")
-                    .font(.caption)
-                Slider(value: $viewModel.easySwitchDifferenceThreshold, in: 0.1...0.7, step: 0.05)
-            }
-            .disabled(!viewModel.easySwitchEnabled)
-            HStack(spacing: 14) {
-                Toggle("English", isOn: $viewModel.easySwitchEnglishEnabled)
-                    .toggleStyle(.checkbox)
-                Toggle("Russian", isOn: $viewModel.easySwitchRussianEnabled)
-                    .toggleStyle(.checkbox)
-            }
-            .disabled(!viewModel.easySwitchEnabled)
-            TextField("Protected words for AI and EasySwitch, comma-separated", text: $viewModel.easySwitchWhitelistText)
-            Toggle("Show correction notification", isOn: $viewModel.easySwitchShowCorrectionNotification)
-                .toggleStyle(.checkbox)
-                .disabled(!viewModel.easySwitchEnabled)
-            Toggle("Play sound on correction", isOn: $viewModel.easySwitchPlaySoundOnCorrection)
-                .toggleStyle(.checkbox)
-                .disabled(!viewModel.easySwitchEnabled)
-            Toggle("Privacy mode for EasySwitch logs", isOn: $viewModel.easySwitchPrivacyMode)
-                .toggleStyle(.checkbox)
-                .disabled(!viewModel.easySwitchEnabled)
-        }
-    }
-
     @ViewBuilder
     private var providerSetupHelp: some View {
         switch viewModel.provider {
@@ -304,9 +276,64 @@ struct ContentView: View {
     }
 }
 
+private struct HotKeySettingRow: View {
+    let title: String
+    @Binding var hotKey: TextoraHotKey
+    @State private var isRecording = false
+    @State private var monitor: Any?
+
+    var body: some View {
+        HStack {
+            Toggle(title, isOn: Binding(
+                get: { hotKey.isEnabled },
+                set: { hotKey.isEnabled = $0 }
+            ))
+            .toggleStyle(.checkbox)
+            Spacer()
+            Button(isRecording ? "Press shortcut…" : hotKey.displayName) {
+                beginRecording()
+            }
+            .frame(minWidth: 112)
+            .disabled(!hotKey.isEnabled)
+        }
+        .onDisappear { stopRecording() }
+    }
+
+    private func beginRecording() {
+        stopRecording()
+        isRecording = true
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53 {
+                stopRecording()
+                return nil
+            }
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            guard flags.contains(.command) || flags.contains(.control) || flags.contains(.option) else {
+                NSSound.beep()
+                return nil
+            }
+            var carbon: UInt32 = 0
+            if flags.contains(.command) { carbon |= UInt32(cmdKey) }
+            if flags.contains(.option) { carbon |= UInt32(optionKey) }
+            if flags.contains(.control) { carbon |= UInt32(controlKey) }
+            if flags.contains(.shift) { carbon |= UInt32(shiftKey) }
+            hotKey = TextoraHotKey(keyCode: UInt32(event.keyCode), modifiers: carbon, isEnabled: true)
+            stopRecording()
+            return nil
+        }
+    }
+
+    private func stopRecording() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        isRecording = false
+    }
+}
+
 private struct InterfaceModeCards: View {
     @Binding var toolboxEnabled: Bool
     @Binding var floatingIconEnabled: Bool
+    var hotKeysOnly: Binding<Bool>? = nil
     var compact = false
 
     var body: some View {
@@ -327,6 +354,16 @@ private struct InterfaceModeCards: View {
                 preview: .floating,
                 compact: compact
             )
+            if let hotKeysOnly {
+                InterfaceModeCard(
+                    title: "Hotkeys",
+                    subtitle: compact ? "Keyboard only" : "Run Rewrite or Translate only when you press a global shortcut.",
+                    isOn: hotKeysOnly,
+                    accent: Color(red: 0.30, green: 0.78, blue: 0.62),
+                    preview: .hotkeys,
+                    compact: compact
+                )
+            }
         }
     }
 }
@@ -335,6 +372,7 @@ private struct InterfaceModeCard: View {
     enum PreviewKind {
         case toolbox
         case floating
+        case hotkeys
     }
 
     let title: String
@@ -382,6 +420,8 @@ private struct InterfaceModeCard: View {
             toolboxPreview
         case .floating:
             floatingPreview
+        case .hotkeys:
+            hotKeysPreview
         }
     }
 
@@ -478,6 +518,46 @@ private struct InterfaceModeCard: View {
         }
     }
 
+    private var hotKeysPreview: some View {
+        VStack(spacing: 7) {
+            HStack(spacing: 7) {
+                hotKeyPreviewKey("⌥⌘R")
+                Text("Rewrite")
+                    .font(.system(size: compact ? 8 : 9, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.72))
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 7) {
+                hotKeyPreviewKey("⌥⌘T")
+                Text("Translate")
+                    .font(.system(size: compact ? 8 : 9, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.72))
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(Color.black.opacity(0.24))
+        )
+    }
+
+    private func hotKeyPreviewKey(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: compact ? 8 : 9, weight: .heavy, design: .rounded))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 7)
+            .frame(height: compact ? 20 : 23)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.white.opacity(0.12))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+            )
+    }
+
     private func previewPill(_ text: String, color: Color) -> some View {
         Text(text)
             .font(.system(size: compact ? 7.5 : 8.5, weight: .heavy))
@@ -560,16 +640,29 @@ struct OnboardingView: View {
                 Text("Choose how Textora should appear when you write.")
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.muted)
-                Text("Toolbox is the new selection panel. Floating icon is the classic marker. You can enable both.")
+                Text("Choose Toolbox, the classic Floating icon, or run Textora only with keyboard shortcuts.")
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.muted)
                 InterfaceModeCards(
-                    toolboxEnabled: $viewModel.toolboxEnabled,
-                    floatingIconEnabled: $viewModel.floatingIconEnabled,
+                    toolboxEnabled: onboardingModeBinding(.toolbox),
+                    floatingIconEnabled: onboardingModeBinding(.floatingIcon),
+                    hotKeysOnly: onboardingModeBinding(.hotKeys),
                     compact: false
                 )
-                if !viewModel.toolboxEnabled && !viewModel.floatingIconEnabled {
-                    Text("Select at least one interface mode to continue.")
+                if viewModel.onboardingInterfaceMode == .hotKeys {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("Choose your shortcuts")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.white)
+                        HotKeySettingRow(title: "Rewrite selected text", hotKey: $viewModel.rewriteHotKey)
+                        HotKeySettingRow(title: "Translate selected text", hotKey: $viewModel.translateHotKey)
+                        Text("Suggested: ⌥⌘R for Rewrite and ⌥⌘T for Translate")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.muted)
+                    }
+                }
+                if !viewModel.hasValidOnboardingInterfaceSelection {
+                    Text("Enable at least one shortcut to continue.")
                         .font(.caption)
                         .foregroundStyle(Color.red.opacity(0.95))
                 }
@@ -607,7 +700,7 @@ struct OnboardingView: View {
                     Button("Continue") {
                         viewModel.moveOnboardingNext()
                     }
-                    .disabled(!viewModel.toolboxEnabled && !viewModel.floatingIconEnabled)
+                    .disabled(!viewModel.hasValidOnboardingInterfaceSelection)
                     .buttonStyle(PrimaryButtonStyle())
                 } else {
                     Button("Finish") {
@@ -630,9 +723,19 @@ struct OnboardingView: View {
             }
         }
         .padding(16)
-        .frame(width: 500, height: 470)
+        .frame(width: 560, height: 540)
         .background(popupBackground)
         .preferredColorScheme(.dark)
+    }
+
+    private func onboardingModeBinding(_ mode: AppViewModel.OnboardingInterfaceMode) -> Binding<Bool> {
+        Binding(
+            get: { viewModel.onboardingInterfaceMode == mode },
+            set: { selected in
+                guard selected else { return }
+                viewModel.selectOnboardingInterfaceMode(mode)
+            }
+        )
     }
     
     private var header: some View {

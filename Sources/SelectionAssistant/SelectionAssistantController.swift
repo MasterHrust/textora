@@ -1,8 +1,9 @@
 import AppKit
+import Combine
 import SwiftUI
 
 @MainActor
-final class SelectionAssistantController {
+final class SelectionAssistantController: NSObject, NSWindowDelegate {
     private let textService = TextAccessService()
     private let viewModel = SelectionAssistantViewModel()
     private var panel: NSPanel?
@@ -32,6 +33,9 @@ final class SelectionAssistantController {
     private var eventMonitorTokens: [Any] = []
     private var commandAEventTap: CFMachPort?
     private var commandAEventTapSource: CFRunLoopSource?
+    private var viewModelCancellable: AnyCancellable?
+    private var automaticDetectionEnabled = true
+    private var isProgrammaticallyMovingPanel = false
 
     var onConsentRequired: ((CGRect, String) -> Void)?
 
@@ -39,14 +43,17 @@ final class SelectionAssistantController {
     private static let panelTopReserve: CGFloat = SelectionToolbarView.tooltipTopReserve
     private static let maxPanelContentHeight: CGFloat = 170
     private static let transientSelectionLossGrace: TimeInterval = 0.65
+    private static let hotKeyPanelOriginXKey = "hotkey.panel.originX"
+    private static let hotKeyPanelOriginYKey = "hotkey.panel.originY"
 
     private enum PanelPlacementSide {
         case above
         case below
     }
 
-    func start() {
+    func start(automaticDetectionEnabled: Bool = true) {
         SelectionAssistantSettings.registerDefaults()
+        self.automaticDetectionEnabled = automaticDetectionEnabled
         createPanelIfNeeded()
         installInputMonitorsIfNeeded()
         timer?.invalidate()
@@ -118,6 +125,7 @@ final class SelectionAssistantController {
             stop()
             return
         }
+        guard automaticDetectionEnabled else { return }
         if Date() < suppressSelectionUntil {
             if !isMouseInsidePanel {
                 let until = suppressSelectionUntil
@@ -515,6 +523,16 @@ final class SelectionAssistantController {
 
     private func handleSelectionGestureEvent(_ event: NSEvent) {
         guard UserDefaults.standard.bool(forKey: SelectionAssistantSettings.Keys.enabled) else { return }
+        if event.type == .keyDown, event.keyCode == 53 {
+            hideForNoSelection()
+            return
+        }
+        if !automaticDetectionEnabled {
+            if event.type == .leftMouseDown, panel?.isVisible == true, !isMouseInsidePanel {
+                hideForNoSelection()
+            }
+            return
+        }
         switch event.type {
         case .leftMouseDown:
             let clickedInsidePanel = isMouseInsidePanel
@@ -550,6 +568,10 @@ final class SelectionAssistantController {
                 lastSelectionGestureAnchor = mouseAnchor()
                 beginNewSelectionGesture("mouseDrag")
                 allowFallbackProbeBriefly()
+            } else if event.clickCount >= 2 || event.modifierFlags.contains(.shift) {
+                lastSelectionGestureAnchor = mouseAnchor()
+                beginNewSelectionGesture(event.clickCount >= 3 ? "tripleClick" : "doubleOrShiftClick")
+                allowFallbackProbeBriefly()
             } else if textService.isGoogleSheetsSelectionSurfaceFrontmost() {
                 lastSelectionGestureAnchor = mouseAnchor()
                 beginNewSelectionGesture("googleSheetsClick")
@@ -565,12 +587,17 @@ final class SelectionAssistantController {
                 && (event.charactersIgnoringModifiers?.lowercased() == "a" || event.keyCode == 0)
             let isCommandC = flags.contains(.command)
                 && (event.charactersIgnoringModifiers?.lowercased() == "c" || event.keyCode == 8)
+            let isKeyboardSelection = flags.contains(.shift)
+                && [UInt16(115), 119, 123, 124, 125, 126].contains(event.keyCode)
             if isCommandA {
                 resetResolvedSelectionState()
                 beginNewSelectionGesture("cmdA")
                 allowFallbackProbeBriefly()
             } else if isCommandC {
                 handleCommandCEvent()
+            } else if isKeyboardSelection {
+                beginNewSelectionGesture("keyboardSelection")
+                allowFallbackProbeBriefly()
             }
         default:
             break
@@ -678,12 +705,19 @@ final class SelectionAssistantController {
 
     private func createPanelIfNeeded() {
         guard panel == nil else { return }
-        let root = SelectionToolbarView(viewModel: viewModel) { [weak self] in
-            guard let self else { return }
-            self.viewModel.apply { [weak self] in
-                self?.panel?.orderOut(nil)
+        let root = SelectionToolbarView(
+            viewModel: viewModel,
+            onApply: { [weak self] in
+                guard let self else { return }
+                self.viewModel.apply { [weak self] in self?.panel?.orderOut(nil) }
+            },
+            onTranslationCopied: { [weak self] in
+                self?.hideForNoSelection()
+            },
+            onClose: { [weak self] in
+                self?.hideForNoSelection()
             }
-        }
+        )
         let host = NSHostingView(rootView: root)
         host.frame = NSRect(origin: .zero, size: currentPanelSize)
         host.wantsLayer = true
@@ -701,8 +735,22 @@ final class SelectionAssistantController {
         panel.hasShadow = false
         panel.level = .statusBar
         panel.hidesOnDeactivate = false
+        panel.isMovable = true
+        panel.isMovableByWindowBackground = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        panel.delegate = self
         self.panel = panel
+        viewModelCancellable = viewModel.objectWillChange.sink { [weak self] _ in
+            DispatchQueue.main.async { [weak self] in
+                self?.resizeVisiblePanelForModelChange()
+            }
+        }
+    }
+
+    private func resizeVisiblePanelForModelChange() {
+        guard panel?.isVisible == true else { return }
+        let anchor = lockedAnchor ?? stableSelectionAnchor ?? lastSelectionGestureAnchor ?? mouseAnchor()
+        showOrMovePanel(near: anchor)
     }
 
     private func showOrMovePanel(near anchor: CGRect) {
@@ -710,9 +758,17 @@ final class SelectionAssistantController {
         guard let panel else { return }
         let size = currentPanelSize
         panel.contentView?.frame = NSRect(origin: .zero, size: size)
-        let frame = panelFrame(near: anchor, size: size, lockPlacement: !isMouseSelectionDragActive)
+        let frame: CGRect
+        if viewModel.presentationMode != .standard,
+           let savedFrame = savedHotKeyPanelFrame(size: size) {
+            frame = savedFrame
+        } else {
+            frame = panelFrame(near: anchor, size: size, lockPlacement: !isMouseSelectionDragActive)
+        }
         if panel.frame != frame {
+            isProgrammaticallyMovingPanel = true
             panel.setFrame(frame, display: true)
+            isProgrammaticallyMovingPanel = false
         }
         if !panel.isVisible {
             panel.alphaValue = 1
@@ -720,7 +776,78 @@ final class SelectionAssistantController {
         }
     }
 
+    func windowDidMove(_ notification: Notification) {
+        guard !isProgrammaticallyMovingPanel,
+              viewModel.presentationMode != .standard,
+              let movedPanel = notification.object as? NSPanel,
+              movedPanel === panel,
+              movedPanel.isVisible else { return }
+        UserDefaults.standard.set(movedPanel.frame.minX, forKey: Self.hotKeyPanelOriginXKey)
+        UserDefaults.standard.set(movedPanel.frame.minY, forKey: Self.hotKeyPanelOriginYKey)
+    }
+
+    private func savedHotKeyPanelFrame(size: CGSize) -> CGRect? {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: Self.hotKeyPanelOriginXKey) != nil,
+              defaults.object(forKey: Self.hotKeyPanelOriginYKey) != nil else { return nil }
+        var frame = CGRect(
+            x: defaults.double(forKey: Self.hotKeyPanelOriginXKey),
+            y: defaults.double(forKey: Self.hotKeyPanelOriginYKey),
+            width: size.width,
+            height: size.height
+        )
+        let screen = NSScreen.screens.first(where: { $0.frame.intersects(frame) })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+        guard let visible = screen?.visibleFrame else { return frame }
+        let padding: CGFloat = 28
+        frame.origin.x = min(
+            max(frame.minX, visible.minX + padding),
+            max(visible.minX + padding, visible.maxX - frame.width - padding)
+        )
+        frame.origin.y = min(
+            max(frame.minY, visible.minY + padding),
+            max(visible.minY + padding, visible.maxY - frame.height - padding)
+        )
+        return frame
+    }
+
+    func performHotKeyAction(_ action: TextoraHotKeyAction) {
+        resetResolvedSelectionState()
+        viewModel.clear()
+        allowFallbackProbeBriefly()
+
+        if let signal = textService.selectedTextSignalAnyFocus(),
+           textService.appConsentStatus(for: signal.targetBundleID) == .unknown {
+            hideForConsentRequired(signal: signal, anchor: preferredAnchor(for: signal))
+            return
+        }
+        guard let context = readSelectedTextContextForToolbar() else {
+            hideForNoSelection()
+            return
+        }
+        let key = selectionKey(for: context)
+        let anchor = preferredAnchor(for: context)
+        pendingSelectionKey = key
+        rememberAnchor(anchor, for: key)
+        viewModel.prepareHotKeyPresentation(action)
+        switch action {
+        case .rewrite:
+            viewModel.setSelectionContext(context, preservePresentation: true)
+        case .translate:
+            viewModel.setSelectionContext(context, automaticallyCheck: false, preservePresentation: true)
+            viewModel.translate()
+        }
+        showOrMovePanel(near: anchor)
+    }
+
     private var currentPanelSize: CGSize {
+        if viewModel.presentationMode != .standard {
+            return CGSize(
+                width: SelectionToolbarView.hotKeyPanelWidth,
+                height: SelectionToolbarView.hotKeyPanelHeight(for: viewModel)
+            )
+        }
         let contentHeight: CGFloat
         if viewModel.isLanguagePickerExpanded {
             contentHeight = 170
@@ -730,6 +857,10 @@ final class SelectionAssistantController {
         return CGSize(width: Self.panelWidth, height: contentHeight + Self.panelTopReserve)
     }
 
+    private var currentPanelTopReserve: CGFloat {
+        viewModel.presentationMode == .standard ? Self.panelTopReserve : 0
+    }
+
     private var isMouseInsidePanel: Bool {
         guard let panel, panel.isVisible else { return false }
         return panel.frame.insetBy(dx: -8, dy: -8).contains(NSEvent.mouseLocation)
@@ -737,8 +868,10 @@ final class SelectionAssistantController {
 
     private func panelFrame(near anchor: CGRect, size: CGSize, lockPlacement: Bool) -> CGRect {
         let gap: CGFloat = viewModel.hasRewritePreview || viewModel.hasTranslationContent ? 34 : 18
-        let contentSize = CGSize(width: size.width, height: max(1, size.height - Self.panelTopReserve))
-        let placementContentHeight = max(contentSize.height, Self.maxPanelContentHeight)
+        let contentSize = CGSize(width: size.width, height: max(1, size.height - currentPanelTopReserve))
+        let placementContentHeight = viewModel.presentationMode == .standard
+            ? max(contentSize.height, Self.maxPanelContentHeight)
+            : contentSize.height
         let contentX = anchor.midX - contentSize.width / 2
         var contentFrame = CGRect(
             x: contentX,
@@ -750,7 +883,7 @@ final class SelectionAssistantController {
         guard let visible = screen?.visibleFrame else {
             return CGRect(origin: contentFrame.origin, size: size)
         }
-        let pad: CGFloat = 8
+        let pad: CGFloat = viewModel.presentationMode == .standard ? 8 : 28
         let aboveFrame = CGRect(
             x: anchor.midX - contentSize.width / 2,
             y: anchor.maxY + gap,
@@ -763,7 +896,7 @@ final class SelectionAssistantController {
             width: contentSize.width,
             height: contentSize.height
         )
-        let aboveFits = anchor.maxY + gap + placementContentHeight + Self.panelTopReserve <= visible.maxY - pad
+        let aboveFits = anchor.maxY + gap + placementContentHeight + currentPanelTopReserve <= visible.maxY - pad
             && aboveFrame.minY >= visible.minY + pad
         let belowFits = anchor.minY - gap - placementContentHeight >= visible.minY + pad
             && belowFrame.maxY <= visible.maxY - pad
@@ -778,7 +911,7 @@ final class SelectionAssistantController {
         } else if belowFits {
             side = .below
         } else {
-            let spaceAbove = visible.maxY - anchor.maxY - gap - Self.panelTopReserve
+            let spaceAbove = visible.maxY - anchor.maxY - gap - currentPanelTopReserve
             let spaceBelow = anchor.minY - visible.minY - gap
             side = spaceAbove >= spaceBelow ? .above : .below
         }
@@ -788,7 +921,7 @@ final class SelectionAssistantController {
         contentFrame = side == .above ? aboveFrame : belowFrame
         contentFrame.origin.x = min(max(contentFrame.origin.x, visible.minX + pad), visible.maxX - contentFrame.width - pad)
         if side == .above {
-            contentFrame.origin.y = min(contentFrame.origin.y, visible.maxY - contentFrame.height - Self.panelTopReserve - pad)
+            contentFrame.origin.y = min(contentFrame.origin.y, visible.maxY - contentFrame.height - currentPanelTopReserve - pad)
             contentFrame.origin.y = max(contentFrame.origin.y, anchor.maxY + gap)
         } else {
             contentFrame.origin.y = max(contentFrame.origin.y, visible.minY + pad)
@@ -968,24 +1101,5 @@ final class SelectionAssistantController {
         context: TextAccessService.FocusedTextContext? = nil,
         key: String? = nil,
         extra: String = ""
-    ) {
-        guard SelectionAssistantSettings.diagnosticsEnabled() else { return }
-        let textPart: String = {
-            guard let context else { return "" }
-            return " textLen=\((context.text as NSString).length) text=\(textoraDiagPreview(context.text, limit: 80))"
-        }()
-        let signalPart: String = {
-            guard let signal else { return "" }
-            return " bundle=\(signal.targetBundleID) pid=\(signal.targetAppPID) range=\(signal.selectedRange.map { "\($0.location):\($0.length)" } ?? "nil") bounds=\(textoraDiagRect(signal.bounds))"
-        }()
-        let contextPart: String = {
-            guard let context else { return "" }
-            return " bundle=\(context.targetBundleID) pid=\(context.targetAppPID) selectedRange=\(context.selectedRange.map { "\($0.location):\($0.length)" } ?? "nil") source=\(context.anchor.source.rawValue) confidence=\(context.anchor.confidence.rawValue)"
-        }()
-        let message = "\(event) id=\(selectionGestureID) key=\(key ?? "nil") pending=\(pendingSelectionKey ?? "nil") panel=\(panel?.isVisible == true)\(signalPart)\(contextPart)\(textPart)\(extra.isEmpty ? "" : " \(extra)")"
-        let signature = "\(event)|\(key ?? "nil")|\(pendingSelectionKey ?? "nil")|\(signal?.selectedRange.map { "\($0.location):\($0.length)" } ?? "nil")|\(context.map { "\(($0.text as NSString).length):\($0.anchor.source.rawValue)" } ?? "nil")|\(extra)"
-        guard signature != lastTraceSignature else { return }
-        lastTraceSignature = signature
-        textoraDiagLog("selectionAssistant", message)
-    }
+    ) {}
 }

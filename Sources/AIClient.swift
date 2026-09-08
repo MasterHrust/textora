@@ -1,5 +1,38 @@
 import Foundation
 
+enum SecureAITransportPolicy {
+    static func allows(_ url: URL?) -> Bool {
+        guard let url else { return false }
+        return url.scheme?.lowercased() == "https"
+            && url.host?.isEmpty == false
+            && url.user == nil
+            && url.password == nil
+    }
+
+    static func redirectedRequest(originalURL: URL?, proposedRequest: URLRequest) -> URLRequest? {
+        guard allows(originalURL),
+              allows(proposedRequest.url),
+              proposedRequest.url?.host?.lowercased() == originalURL?.host?.lowercased(),
+              proposedRequest.url?.port == originalURL?.port else { return nil }
+        return proposedRequest
+    }
+}
+
+private final class SecureAIURLSessionDelegate: NSObject, URLSessionTaskDelegate {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(SecureAITransportPolicy.redirectedRequest(
+            originalURL: task.originalRequest?.url,
+            proposedRequest: request
+        ))
+    }
+}
+
 private actor AIRequestDeduplicator {
     static let shared = AIRequestDeduplicator()
 
@@ -36,7 +69,24 @@ private actor AIRequestDeduplicator {
 struct AIClient {
     /// User-configured base URL for OpenAI-compatible Chat Completions (stored in UserDefaults).
     static let openAICompatibleBaseURLUserDefaultsKey = "openAICompatibleBaseURL"
-    private let userDictionary = UserDictionary()
+    private static let secureSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.httpShouldSetCookies = false
+        return URLSession(configuration: configuration, delegate: SecureAIURLSessionDelegate(), delegateQueue: nil)
+    }()
+
+    private static func secureData(for request: URLRequest) async throws -> (Data, URLResponse) {
+        guard SecureAITransportPolicy.allows(request.url) else {
+            throw NSError(
+                domain: "Textora.Security",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "AI requests require a valid HTTPS endpoint"]
+            )
+        }
+        return try await secureSession.data(for: request)
+    }
 
     enum Defaults {
         static let openAIModel = "gpt-5.4"
@@ -81,7 +131,7 @@ struct AIClient {
             "aiRewrite",
             "request kind=\(kind) provider=\(provider.rawValue) model=\(model) "
             + "operation=\(operation?.rawValue ?? "multi") prompt=\(promptKind) "
-            + "textLen=\((text as NSString).length) text=\(textoraDiagPreview(text))"
+            + "textLen=\((text as NSString).length)"
         )
         return startedAt
     }
@@ -129,7 +179,7 @@ struct AIClient {
         textoraDiagLog(
             "aiRewrite",
             "response kind=\(kind) durationMs=\(Int(Date().timeIntervalSince(startedAt) * 1000)) "
-            + "outputLen=\((output as NSString).length) output=\(textoraDiagPreview(output))"
+            + "outputLen=\((output as NSString).length)"
         )
     }
 
@@ -822,17 +872,9 @@ struct AIClient {
             tokens.append(contentsOf: regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
                 .map { ns.substring(with: $0.range) })
         }
-        tokens.append(contentsOf: userProtectedTokens(in: text))
         tokens.append(contentsOf: properNameTokens(in: text))
         tokens.append(contentsOf: emojiTokens(in: text))
         return tokens
-    }
-
-    private func userProtectedTokens(in text: String) -> [String] {
-        let protected = userDictionary.protectedWords()
-        guard !protected.isEmpty else { return [] }
-        let words = lexicalTokens(in: text)
-        return words.filter { protected.contains($0.lowercased()) }
     }
 
     private func properNameTokens(in text: String) -> [String] {
@@ -908,18 +950,13 @@ struct AIClient {
 
     private func availableGeminiModels(apiKey: String) async throws -> [AIModelOption] {
         var components = URLComponents(string: "https://generativelanguage.googleapis.com/v1beta/models")
-        components?.queryItems = [
-            URLQueryItem(name: "pageSize", value: "1000"),
-            URLQueryItem(name: "key", value: apiKey)
-        ]
+        components?.queryItems = [URLQueryItem(name: "pageSize", value: "1000")]
         guard let url = components?.url else {
             throw modelCatalogError(provider: "Gemini", detail: "Invalid models URL")
         }
 
-        let data = try await modelCatalogData(
-            for: URLRequest(url: url, timeoutInterval: 20),
-            provider: "Gemini"
-        )
+        let request = Self.geminiRequest(url: url, apiKey: apiKey, timeoutInterval: 20)
+        let data = try await modelCatalogData(for: request, provider: "Gemini")
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let entries = json?["models"] as? [[String: Any]] ?? []
         let models = entries.compactMap { entry -> AIModelOption? in
@@ -956,7 +993,7 @@ struct AIClient {
     }
 
     private func modelCatalogData(for request: URLRequest, provider: String) async throws -> Data {
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.secureData(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw modelCatalogError(provider: provider, detail: "No HTTP response")
         }
@@ -1041,7 +1078,7 @@ struct AIClient {
         )
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.secureData(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw NSError(domain: "Textora", code: 2, userInfo: [NSLocalizedDescriptionKey: "OpenAI request failed: no HTTP response"])
         }
@@ -1087,10 +1124,14 @@ struct AIClient {
         systemPromptOverride: String?
     ) async throws -> String {
         let encodedModel = model.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? model
-        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(encodedModel):generateContent?key=\(apiKey)") else {
+        let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else {
+            throw NSError(domain: "Textora", code: 4, userInfo: [NSLocalizedDescriptionKey: "Gemini API key is empty"])
+        }
+        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(encodedModel):generateContent") else {
             throw NSError(domain: "Textora", code: 4, userInfo: [NSLocalizedDescriptionKey: "Invalid Gemini URL"])
         }
-        var request = URLRequest(url: url)
+        var request = Self.geminiRequest(url: url, apiKey: key)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let prompt = "\(systemPromptOverride ?? operation.prompt)\n\n\(text)"
@@ -1101,7 +1142,7 @@ struct AIClient {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.secureData(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw NSError(domain: "Textora", code: 5, userInfo: [NSLocalizedDescriptionKey: "Gemini request failed"])
         }
@@ -1146,7 +1187,7 @@ struct AIClient {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.secureData(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw NSError(domain: "Textora", code: 16, userInfo: [NSLocalizedDescriptionKey: "Claude request failed: no HTTP response"])
         }
@@ -1185,7 +1226,7 @@ struct AIClient {
         guard !base.isEmpty else {
             throw NSError(domain: "Textora", code: 10, userInfo: [NSLocalizedDescriptionKey: "Set API base URL in Settings (Other AI)"])
         }
-        guard let url = openAICompatibleURL(from: base) else {
+        guard let url = Self.validatedOpenAICompatibleURL(from: base) else {
             throw NSError(domain: "Textora", code: 10, userInfo: [NSLocalizedDescriptionKey: "Invalid API base URL"])
         }
 
@@ -1204,7 +1245,7 @@ struct AIClient {
         )
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.secureData(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw NSError(domain: "Textora", code: 11, userInfo: [NSLocalizedDescriptionKey: "OpenAI-compatible request failed: no HTTP response"])
         }
@@ -1226,19 +1267,31 @@ struct AIClient {
         return content
     }
 
-    private func openAICompatibleURL(from rawBaseURL: String) -> URL? {
-        let normalized = rawBaseURL.hasPrefix("http://") || rawBaseURL.hasPrefix("https://")
-            ? rawBaseURL
-            : "http://\(rawBaseURL)"
-        guard let url = URL(string: normalized) else { return nil }
+    static func validatedOpenAICompatibleURL(from rawBaseURL: String) -> URL? {
+        let trimmed = rawBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
+        guard let url = URL(string: normalized),
+              url.scheme?.lowercased() == "https",
+              url.host?.isEmpty == false,
+              url.user == nil,
+              url.password == nil else { return nil }
         let path = url.path.lowercased()
         if path.hasSuffix("/chat/completions") {
             return url
         }
-        if path.hasSuffix("/v1") || path.isEmpty || path == "/" {
+        if path.hasSuffix("/v1") {
             return url.appendingPathComponent("chat").appendingPathComponent("completions")
         }
+        if path.isEmpty || path == "/" {
+            return url.appendingPathComponent("v1").appendingPathComponent("chat").appendingPathComponent("completions")
+        }
         return url.appendingPathComponent("v1").appendingPathComponent("chat").appendingPathComponent("completions")
+    }
+
+    static func geminiRequest(url: URL, apiKey: String, timeoutInterval: TimeInterval = 60) -> URLRequest {
+        var request = URLRequest(url: url, timeoutInterval: timeoutInterval)
+        request.setValue(apiKey.trimmingCharacters(in: .whitespacesAndNewlines), forHTTPHeaderField: "x-goog-api-key")
+        return request
     }
 
     /// Keep the shared Chat Completions payload model-neutral. Sampling and

@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import UniformTypeIdentifiers
 
 extension Notification.Name {
     static let textoraAccessibilityPermissionDidChange = Notification.Name("textoraAccessibilityPermissionDidChange")
@@ -50,53 +51,25 @@ final class AccessibilityPermissionMonitor {
     }
 }
 
-// MARK: - Shared diagnostic log (/tmp/TextoraMarkerGeometry.log)
-//
-// Top-level helper used from both `TextAccessService` and
-// `FloatingHelperController` to record the full apply-pipeline trace.
-// Kept free-standing so either side can add entries without creating a
-// new compilation unit (and having to register it in the Xcode project).
-private let textoraDiagLogURL = URL(fileURLWithPath: "/tmp/TextoraMarkerGeometry.log")
-private let textoraDiagTimestampFormatter: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return f
-}()
+// MARK: - Removed diagnostics compatibility
 
-/// Compact, one-line trace used by the apply pipeline. Long payloads are
-/// truncated so the log stays tail-friendly.
-@inline(__always)
-func textoraDiagLog(_ category: String, _ message: @autoclosure () -> String) {
-    let raw = message()
-    let truncated: String = {
-        if raw.count <= 360 { return raw }
-        return String(raw.prefix(360)) + "…"
-    }()
-    let line = "\(textoraDiagTimestampFormatter.string(from: Date())) [\(category)] \(truncated)\n"
-    guard let data = line.data(using: .utf8) else { return }
-    if FileManager.default.fileExists(atPath: textoraDiagLogURL.path),
-       let handle = try? FileHandle(forWritingTo: textoraDiagLogURL) {
-        defer { try? handle.close() }
-        _ = try? handle.seekToEnd()
-        try? handle.write(contentsOf: data)
-    } else {
-        try? data.write(to: textoraDiagLogURL, options: .atomic)
-    }
+func removeObsoleteTextoraDiagnostics() {
+    let manager = FileManager.default
+    let appSupport = manager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    let diagnosticsDirectory = appSupport
+        .appendingPathComponent(Bundle.main.bundleIdentifier ?? "com.textora.app", isDirectory: true)
+        .appendingPathComponent("Diagnostics", isDirectory: true)
+    try? manager.removeItem(at: URL(fileURLWithPath: "/tmp/TextoraMarkerGeometry.log"))
+    try? manager.removeItem(at: diagnosticsDirectory)
+    UserDefaults.standard.removeObject(forKey: "selectionAssistant.diagnostics.enabled")
 }
 
-/// Short, human-readable preview of a potentially long string. Newlines are
-/// collapsed to `⏎` so the whole entry stays on a single line.
+@inline(__always)
+func textoraDiagLog(_ category: String, _ message: @autoclosure () -> String) {}
+
 @inline(__always)
 func textoraDiagPreview(_ value: String, limit: Int = 120) -> String {
-    let sanitized = value
-        .replacingOccurrences(of: "\r\n", with: "⏎")
-        .replacingOccurrences(of: "\n", with: "⏎")
-        .replacingOccurrences(of: "\r", with: "⏎")
-        .replacingOccurrences(of: "\t", with: "·")
-    if sanitized.count <= limit { return "\"\(sanitized)\"" }
-    let head = sanitized.prefix(limit / 2)
-    let tail = sanitized.suffix(limit / 2)
-    return "\"\(head)…\(tail)\" (len=\(sanitized.count))"
+    "<redacted len=\((value as NSString).length)>"
 }
 
 @inline(__always)
@@ -516,15 +489,30 @@ final class TextAccessService {
     }
 
     func openAccessibilityPermissionSettings() {
-        requestAccessibilityPermissionIfNeeded()
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            NSApp.activate(ignoringOtherApps: true)
-            self.registerForAccessibilityPermission(prompt: true)
-            Self.openAccessibilitySettingsPane()
+        let trusted = registerForAccessibilityPermission(prompt: true)
+        if trusted {
             Task { @MainActor in
                 AccessibilityPermissionMonitor.shared.refreshNow()
             }
+            return
+        }
+
+        // The system prompt owns the transition to System Settings. Opening the
+        // pane here as well leaves that prompt hidden behind Settings.
+        for delay in [0.25, 0.75, 1.5, 3.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                Task { @MainActor in
+                    AccessibilityPermissionMonitor.shared.refreshNow()
+                }
+            }
+        }
+    }
+
+    func openAccessibilitySettingsWithoutPrompt() {
+        _ = registerForAccessibilityPermission(prompt: false)
+        Self.openAccessibilitySettingsPane()
+        Task { @MainActor in
+            AccessibilityPermissionMonitor.shared.refreshNow()
         }
     }
 
@@ -1255,9 +1243,52 @@ final class TextAccessService {
             textoraDiagLog("clipboardProbe", "no pasteboard change after copy; refusing stale clipboard")
             return nil
         }
-        let copied = extractPlainTextFromPasteboard(pasteboard)
+        let containsObjectPayload = pasteboardContainsObjectPayload(pasteboard)
+        let copied = containsObjectPayload ? nil : extractPlainTextFromPasteboard(pasteboard)
+        if containsObjectPayload {
+            textoraDiagLog("clipboardProbe", "rejected non-text pasteboard payload")
+        }
         restorePasteboard(pasteboard, snapshot: snapshot)
         return copied
+    }
+
+    private func pasteboardContainsObjectPayload(_ pasteboard: NSPasteboard) -> Bool {
+        let allowedRichText = Set([
+            NSPasteboard.PasteboardType.string.rawValue,
+            NSPasteboard.PasteboardType.rtf.rawValue,
+            NSPasteboard.PasteboardType.rtfd.rawValue,
+            NSPasteboard.PasteboardType.html.rawValue,
+            "public.utf8-plain-text",
+            "public.utf16-external-plain-text"
+        ])
+        let identifiers = (pasteboard.pasteboardItems ?? []).flatMap { $0.types.map(\.rawValue) }
+        return Self.containsObjectPasteboardType(identifiers, allowedRichText: allowedRichText)
+    }
+
+    static func containsObjectPasteboardType(
+        _ identifiers: [String],
+        allowedRichText: Set<String> = [
+            NSPasteboard.PasteboardType.string.rawValue,
+            NSPasteboard.PasteboardType.rtf.rawValue,
+            NSPasteboard.PasteboardType.rtfd.rawValue,
+            NSPasteboard.PasteboardType.html.rawValue,
+            "public.utf8-plain-text",
+            "public.utf16-external-plain-text"
+        ]
+    ) -> Bool {
+        identifiers.contains { raw in
+            let identifier = raw.lowercased()
+            if allowedRichText.contains(raw) { return false }
+            return identifier.contains("image")
+                || identifier.contains("file-url")
+                || identifier.contains("adobe")
+                || identifier.contains("photoshop")
+                || identifier.contains("illustrator")
+                || identifier.contains("svg")
+                || identifier == UTType.pdf.identifier.lowercased()
+                || UTType(identifier)?.conforms(to: .image) == true
+                || UTType(identifier)?.conforms(to: .fileURL) == true
+        }
     }
 
     /// After a successful copy, plain `NSStringPboardType` may still be empty (rich text only).
@@ -1352,7 +1383,7 @@ final class TextAccessService {
            !selected.isEmpty {
             return true
         }
-        if let value = valueText(of: element) {
+        if isTextualSelectionElement(element), let value = valueText(of: element) {
             let nsValue = value as NSString
             let location = max(0, range.location)
             let length = max(0, range.length)
@@ -1369,6 +1400,19 @@ final class TextAccessService {
         // PDF readers often expose a range/bounds signal for text selection but hide
         // the actual selected text from AX; the later context read verifies via Cmd+C.
         return isPDFReaderBundleID(bundleID)
+    }
+
+    private func isTextualSelectionElement(_ element: AXUIElement) -> Bool {
+        let role = axString(of: element, attribute: kAXRoleAttribute) ?? ""
+        let subrole = axString(of: element, attribute: kAXSubroleAttribute) ?? ""
+        let textualRoles: Set<String> = [
+            kAXTextFieldRole as String,
+            kAXTextAreaRole as String,
+            kAXStaticTextRole as String,
+            "AXWebArea",
+            "AXDocument"
+        ]
+        return textualRoles.contains(role) || textualRoles.contains(subrole)
     }
 
     /// Reads the currently selected text even when the focused element is not an editable input.
@@ -1685,6 +1729,73 @@ final class TextAccessService {
             }
         }
         return false
+    }
+
+    static func attributedReplacementPreservingFormatting(
+        source: NSAttributedString,
+        rewritten: String
+    ) -> NSAttributedString {
+        guard source.string != rewritten else { return NSAttributedString(attributedString: source) }
+        guard source.length > 0 else { return NSAttributedString(string: rewritten) }
+
+        let sourceCharacters = Array(source.string)
+        let rewrittenCharacters = Array(rewritten)
+        let difference = rewrittenCharacters.difference(from: sourceCharacters)
+        let removedOffsets = Set(difference.compactMap { change -> Int? in
+            guard case let .remove(offset, _, _) = change else { return nil }
+            return offset
+        })
+        let insertedOffsets = Set(difference.compactMap { change -> Int? in
+            guard case let .insert(offset, _, _) = change else { return nil }
+            return offset
+        })
+        let sourceUTF16Offsets: [Int] = sourceCharacters.reduce(into: [0]) { offsets, character in
+            offsets.append(offsets.last! + String(character).utf16.count)
+        }
+
+        let result = NSMutableAttributedString()
+        var sourceIndex = 0
+        var rewrittenIndex = 0
+        var firstRemovedIndex: Int?
+        while rewrittenIndex < rewrittenCharacters.count {
+            while sourceIndex < sourceCharacters.count, removedOffsets.contains(sourceIndex) {
+                if firstRemovedIndex == nil { firstRemovedIndex = sourceIndex }
+                sourceIndex += 1
+            }
+
+            let isInsertion = insertedOffsets.contains(rewrittenIndex)
+            let styleCharacterIndex: Int
+            if !isInsertion,
+               sourceIndex < sourceCharacters.count,
+               sourceCharacters[sourceIndex] == rewrittenCharacters[rewrittenIndex] {
+                styleCharacterIndex = sourceIndex
+                sourceIndex += 1
+                firstRemovedIndex = nil
+            } else {
+                styleCharacterIndex = firstRemovedIndex
+                    ?? min(sourceCharacters.count - 1, sourceIndex)
+            }
+
+            let utf16Index = sourceUTF16Offsets[styleCharacterIndex]
+            var attributes = source.attributes(at: utf16Index, effectiveRange: nil)
+            attributes.removeValue(forKey: .attachment)
+            if isInsertion, firstRemovedIndex == nil {
+                let leftIndex = sourceIndex > 0 ? sourceUTF16Offsets[sourceIndex - 1] : nil
+                let rightIndex = sourceIndex < sourceCharacters.count ? sourceUTF16Offsets[sourceIndex] : nil
+                let leftLink = leftIndex.map { source.attribute(.link, at: $0, effectiveRange: nil) }
+                let rightLink = rightIndex.map { source.attribute(.link, at: $0, effectiveRange: nil) }
+                if leftLink == nil || rightLink == nil
+                    || String(describing: leftLink) != String(describing: rightLink) {
+                    attributes.removeValue(forKey: .link)
+                }
+            }
+            result.append(NSAttributedString(
+                string: String(rewrittenCharacters[rewrittenIndex]),
+                attributes: attributes
+            ))
+            rewrittenIndex += 1
+        }
+        return result
     }
 
     /// Per-app consent for the application that owns this AX node (not `frontmostApplication`).
@@ -2213,10 +2324,13 @@ final class TextAccessService {
             restorePasteboard(pasteboard, snapshot: snapshot)
             return false
         }
+        let richSource = richTextFromPasteboard(pasteboard, matching: copiedBefore)
 
         // 2) Paste rewritten text over selection.
-        pasteboard.clearContents()
-        pasteboard.setString(rewritten, forType: .string)
+        guard writeReplacementToPasteboard(rewritten, preserving: richSource, pasteboard: pasteboard) else {
+            restorePasteboard(pasteboard, snapshot: snapshot)
+            return false
+        }
         guard triggerPasteShortcut() else {
             restorePasteboard(pasteboard, snapshot: snapshot)
             return false
@@ -2305,8 +2419,16 @@ final class TextAccessService {
             }
             usleep(35_000)
 
-            pasteboard.clearContents()
-            pasteboard.setString(diff.replacement, forType: .string)
+            let expected = (context.text as NSString).substring(with: diff.range)
+            let richSource = captureRichTextFromActiveSelection(expectedText: expected, pasteboard: pasteboard)
+            guard writeReplacementToPasteboard(
+                diff.replacement,
+                preserving: richSource,
+                pasteboard: pasteboard
+            ) else {
+                restorePasteboardIfNeeded(pasteboard, snapshot: snapshot, baselineChangeCount: baselineChangeCount)
+                return false
+            }
             guard triggerPasteShortcut() else {
                 restorePasteboardIfNeeded(pasteboard, snapshot: snapshot, baselineChangeCount: baselineChangeCount)
                 return false
@@ -2357,8 +2479,16 @@ final class TextAccessService {
             }
             usleep(45_000)
 
-            pasteboard.clearContents()
-            pasteboard.setString(diff.replacement, forType: .string)
+            let expected = (context.text as NSString).substring(with: diff.range)
+            let richSource = captureRichTextFromActiveSelection(expectedText: expected, pasteboard: pasteboard)
+            guard writeReplacementToPasteboard(
+                diff.replacement,
+                preserving: richSource,
+                pasteboard: pasteboard
+            ) else {
+                restorePasteboardIfNeeded(pasteboard, snapshot: snapshot, baselineChangeCount: baselineChangeCount)
+                return false
+            }
             guard triggerPasteShortcut() else {
                 restorePasteboardIfNeeded(pasteboard, snapshot: snapshot, baselineChangeCount: baselineChangeCount)
                 return false
@@ -2548,8 +2678,16 @@ final class TextAccessService {
         usleep(UInt32(60_000 + absoluteRange.length * 200))
 
         // 4) Paste replacement.
-        pasteboard.clearContents()
-        pasteboard.setString(replacement, forType: .string)
+        let selectedSource = (originalValue as NSString).substring(with: absoluteRange)
+        let richSource = captureRichTextFromActiveSelection(expectedText: selectedSource, pasteboard: pasteboard)
+        guard writeReplacementToPasteboard(
+            replacement,
+            preserving: richSource,
+            pasteboard: pasteboard
+        ) else {
+            restorePasteboardIfNeeded(pasteboard, snapshot: snapshot, baselineChangeCount: baselineChangeCount)
+            return false
+        }
         guard triggerPasteShortcut() else {
             restorePasteboardIfNeeded(pasteboard, snapshot: snapshot, baselineChangeCount: baselineChangeCount)
             textoraDiagLog("caretAnchoredRangePaste", "exit false (triggerPasteShortcut failed)")
@@ -2679,8 +2817,16 @@ final class TextAccessService {
         // composer has a chance to coalesce them before we paste.
         usleep(UInt32(80_000 + absoluteRange.length * 200))
 
-        pasteboard.clearContents()
-        pasteboard.setString(replacement, forType: .string)
+        let selectedSource = originalValue.map { ($0 as NSString).substring(with: absoluteRange) } ?? ""
+        let richSource = captureRichTextFromActiveSelection(expectedText: selectedSource, pasteboard: pasteboard)
+        guard writeReplacementToPasteboard(
+            replacement,
+            preserving: richSource,
+            pasteboard: pasteboard
+        ) else {
+            restorePasteboardIfNeeded(pasteboard, snapshot: snapshot, baselineChangeCount: baselineChangeCount)
+            return false
+        }
         guard triggerPasteShortcut() else {
             restorePasteboardIfNeeded(pasteboard, snapshot: snapshot, baselineChangeCount: baselineChangeCount)
             textoraDiagLog("keystrokeRangePaste", "exit false (triggerPasteShortcut failed)")
@@ -3077,8 +3223,18 @@ final class TextAccessService {
             }
         }
 
-        pasteboard.clearContents()
-        pasteboard.setString(replacement, forType: .string)
+        let richSource = captureRichTextFromActiveSelection(
+            expectedText: expectedSelectedText,
+            pasteboard: pasteboard
+        )
+        guard writeReplacementToPasteboard(
+            replacement,
+            preserving: richSource,
+            pasteboard: pasteboard
+        ) else {
+            restorePasteboardIfNeeded(pasteboard, snapshot: snapshot, baselineChangeCount: baselineChangeCount)
+            return false
+        }
         guard triggerPasteShortcut() else {
             restorePasteboardIfNeeded(pasteboard, snapshot: snapshot, baselineChangeCount: baselineChangeCount)
             textoraDiagLog("clipboardRangePaste", "exit false (triggerPasteShortcut failed)")
@@ -3246,8 +3402,18 @@ final class TextAccessService {
         let pasteboard = NSPasteboard.general
         let snapshot = snapshotPasteboard(pasteboard)
         let baselineChangeCount = pasteboard.changeCount
-        pasteboard.clearContents()
-        pasteboard.setString(replacement, forType: .string)
+        let richSource = captureRichTextFromActiveSelection(
+            expectedText: expectedSelectedText,
+            pasteboard: pasteboard
+        )
+        guard writeReplacementToPasteboard(
+            replacement,
+            preserving: richSource,
+            pasteboard: pasteboard
+        ) else {
+            restorePasteboardIfNeeded(pasteboard, snapshot: snapshot, baselineChangeCount: baselineChangeCount)
+            return false
+        }
         guard triggerPasteShortcut() else {
             restorePasteboardIfNeeded(pasteboard, snapshot: snapshot, baselineChangeCount: baselineChangeCount)
             textoraDiagLog("trustedRangePaste", "exit false (triggerPasteShortcut failed)")
@@ -3567,13 +3733,6 @@ final class TextAccessService {
             + "originalLen=\(originalLen) expectedLen=\((expectedValue as NSString).length) "
             + "keystrokeBudget=\(keystrokeBudget)"
         )
-
-        EasySwitchManager.suppressProgrammaticInput(duration: 4.0)
-        NotificationCenter.default.post(name: EasySwitchManager.programmaticInputDidBeginNotification, object: nil)
-        defer {
-            EasySwitchManager.suppressProgrammaticInput(duration: 0.8)
-            NotificationCenter.default.post(name: EasySwitchManager.programmaticInputDidEndNotification, object: nil)
-        }
 
         if let selectedRangeResult = applySelectedRangePhysicalRewrite(
             changes: sorted,
@@ -5164,6 +5323,86 @@ final class TextAccessService {
         let representations: [(type: NSPasteboard.PasteboardType, data: Data)]
     }
 
+    private func richTextFromPasteboard(
+        _ pasteboard: NSPasteboard,
+        matching expectedText: String
+    ) -> NSAttributedString? {
+        let candidates: [(NSPasteboard.PasteboardType, NSAttributedString.DocumentType)] = [
+            (.rtf, .rtf),
+            (.html, .html)
+        ]
+        for (pasteboardType, documentType) in candidates {
+            guard let data = pasteboard.data(forType: pasteboardType) else { continue }
+            var options: [NSAttributedString.DocumentReadingOptionKey: Any] = [
+                .documentType: documentType
+            ]
+            if documentType == .html {
+                options[.characterEncoding] = String.Encoding.utf8.rawValue
+            }
+            guard let attributed = try? NSAttributedString(
+                data: data,
+                options: options,
+                documentAttributes: nil
+            ), normalized(attributed.string) == normalized(expectedText) else {
+                continue
+            }
+            return attributed
+        }
+        return nil
+    }
+
+    private func captureRichTextFromActiveSelection(
+        expectedText: String,
+        pasteboard: NSPasteboard
+    ) -> NSAttributedString? {
+        guard !expectedText.isEmpty else { return nil }
+        let beforeCopyChangeCount = pasteboard.changeCount
+        triggerCopyShortcut()
+        for _ in 0..<8 {
+            usleep(30_000)
+            if pasteboard.changeCount != beforeCopyChangeCount { break }
+        }
+        guard pasteboard.changeCount != beforeCopyChangeCount,
+              let copied = extractPlainTextFromPasteboard(pasteboard),
+              normalized(copied) == normalized(expectedText) else {
+            return nil
+        }
+        return richTextFromPasteboard(pasteboard, matching: expectedText)
+    }
+
+    @discardableResult
+    private func writeReplacementToPasteboard(
+        _ replacement: String,
+        preserving source: NSAttributedString?,
+        pasteboard: NSPasteboard
+    ) -> Bool {
+        let item = NSPasteboardItem()
+        item.setString(replacement, forType: .string)
+
+        if let source, source.length > 0 {
+            let styled = Self.attributedReplacementPreservingFormatting(
+                source: source,
+                rewritten: replacement
+            )
+            let fullRange = NSRange(location: 0, length: styled.length)
+            if let rtf = try? styled.data(
+                from: fullRange,
+                documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
+            ) {
+                item.setData(rtf, forType: .rtf)
+            }
+            if let html = try? styled.data(
+                from: fullRange,
+                documentAttributes: [.documentType: NSAttributedString.DocumentType.html]
+            ) {
+                item.setData(html, forType: .html)
+            }
+        }
+
+        pasteboard.clearContents()
+        return pasteboard.writeObjects([item])
+    }
+
     private func snapshotPasteboard(_ pasteboard: NSPasteboard) -> [PasteboardSnapshotItem] {
         guard let items = pasteboard.pasteboardItems, !items.isEmpty else { return [] }
         return items.map { item in
@@ -6027,18 +6266,7 @@ end tell
         let signature = "Docs reader \(message)"
         guard signature != lastGoogleDocsDebugSignature else { return }
         lastGoogleDocsDebugSignature = signature
-        let timestamp = ISO8601DateFormatter().string(from: Date())
-        let line = "\(timestamp) \(signature)\n"
-        let url = URL(fileURLWithPath: "/tmp/TextoraMarkerGeometry.log")
-        guard let data = line.data(using: .utf8) else { return }
-        if FileManager.default.fileExists(atPath: url.path),
-           let handle = try? FileHandle(forWritingTo: url) {
-            defer { try? handle.close() }
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: data)
-        } else {
-            try? data.write(to: url, options: .atomic)
-        }
+        textoraDiagLog("googleDocs", signature)
     }
 
     private func googleDocsViewportPayloadFromChrome() -> GoogleDocsViewportPayload? {
@@ -6299,17 +6527,22 @@ end tell
                 return true
             }
             let metadata = sensitiveMetadataText(of: candidate)
-            if sensitiveFieldHints.contains(where: { metadata.contains($0) }) {
+            if depth <= 3, sensitiveFieldHints.contains(where: { containsSensitivePhrase($0, in: metadata) }) {
                 return true
             }
             if isHighRiskSensitiveContext(candidate),
-               highRiskSensitiveFieldHints.contains(where: { metadata.contains($0) }) {
+               highRiskSensitiveFieldHints.contains(where: { containsSensitivePhrase($0, in: metadata) }) {
                 return true
             }
             current = axElement(of: candidate, attribute: kAXParentAttribute as String)
             depth += 1
         }
         return false
+    }
+
+    private func containsSensitivePhrase(_ phrase: String, in metadata: String) -> Bool {
+        let escaped = NSRegularExpression.escapedPattern(for: phrase)
+        return metadata.range(of: "(?<![\\p{L}\\p{N}])\(escaped)(?![\\p{L}\\p{N}])", options: .regularExpression) != nil
     }
 
     private func isHighRiskSensitiveContext(_ element: AXUIElement) -> Bool {
@@ -6616,25 +6849,25 @@ end tell
     private func triggerPhysicalReplacementText(_ text: String) -> Bool {
         guard !text.isEmpty else { return true }
         let finalLayout = preferredKeyboardLayout(forReplacement: text)
-        var activeLayout = EasySwitchInputSource.currentKeyboardLayout()
+        var activeLayout = KeyboardInputSource.currentLayout()
 
-        func select(_ layout: EasySwitchKeyboardLayout) -> Bool {
+        func select(_ layout: TextInputKeyboardLayout) -> Bool {
             if activeLayout != layout {
                 textoraDiagLog(
                     "physicalReplacement",
                     "select layout from=\(activeLayout) to=\(layout)"
                 )
             }
-            let selected = EasySwitchInputSource.selectKeyboardLayout(layout)
+            let selected = KeyboardInputSource.select(layout)
             for _ in 0..<8 {
                 usleep(25_000)
-                let current = EasySwitchInputSource.currentKeyboardLayout()
+                let current = KeyboardInputSource.currentLayout()
                 if current == layout {
                     activeLayout = current
                     return true
                 }
             }
-            activeLayout = EasySwitchInputSource.currentKeyboardLayout()
+            activeLayout = KeyboardInputSource.currentLayout()
             textoraDiagLog(
                 "physicalReplacement",
                 "layout select \(selected ? "not confirmed" : "failed") target=\(layout) current=\(activeLayout)"
@@ -6668,7 +6901,7 @@ end tell
         return true
     }
 
-    private func preferredKeyboardLayout(forReplacement text: String) -> EasySwitchKeyboardLayout? {
+    private func preferredKeyboardLayout(forReplacement text: String) -> TextInputKeyboardLayout? {
         var latin = 0
         var cyrillic = 0
         for scalar in text.unicodeScalars where CharacterSet.letters.contains(scalar) {
@@ -6683,7 +6916,7 @@ end tell
         return nil
     }
 
-    private func preferredKeyboardLayout(forReplacementCharacter character: Character) -> EasySwitchKeyboardLayout? {
+    private func preferredKeyboardLayout(forReplacementCharacter character: Character) -> TextInputKeyboardLayout? {
         if character.unicodeScalars.contains(where: isCyrillicScalar) {
             return .russian
         }
@@ -6699,7 +6932,7 @@ end tell
 
     private func physicalKey(
         forReplacementCharacter character: Character,
-        layout: EasySwitchKeyboardLayout
+        layout: TextInputKeyboardLayout
     ) -> (code: CGKeyCode, shift: Bool)? {
         if character.unicodeScalars.allSatisfy({ CharacterSet.whitespaces.contains($0) }) {
             return physicalASCIIKey(for: " ")
@@ -6715,7 +6948,7 @@ end tell
             return physicalASCIIKey(for: scalar)
         case .russian:
             let lower = Character(String(character).lowercased())
-            guard let latinKey = KeyboardLayoutMapper.ruToEn[lower],
+            guard let latinKey = TextKeyboardLayoutMapper.ruToEn[lower],
                   let scalar = String(latinKey).unicodeScalars.first,
                   let key = physicalASCIIKey(for: scalar) else {
                 return nil

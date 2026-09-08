@@ -5,7 +5,7 @@ import SwiftUI
 @MainActor
 final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
     static let shared = AppCoordinator()
-    private static let onboardingCompletedKey = "onboarding.byok.completed"
+    private static let onboardingCompletedKey = "onboarding.byok.completed.v2"
     private static let onboardingSkippedKey = "onboarding.byok.skipped"
 
     private var floatingHelper: FloatingHelperController?
@@ -18,12 +18,8 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
     private var accessibilityWizardWindow: NSWindow?
     private let consentPrompt = AppConsentPromptController()
     private let textAccess = TextAccessService()
-    private let easySwitch = EasySwitchManager()
-    private var easySwitchSettingsObserver: NSObjectProtocol?
     private var selectionAssistantSettingsObserver: NSObjectProtocol?
     private var accessibilityPermissionObserver: NSObjectProtocol?
-    private var easySwitchStartRetryTask: DispatchWorkItem?
-    private var easySwitchStartRetryCount = 0
     private var primaryInteractionRetryTask: DispatchWorkItem?
     private var primaryInteractionRetryCount = 0
     private var launchWarmupTask: DispatchWorkItem?
@@ -42,9 +38,6 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
     }
 
     deinit {
-        if let easySwitchSettingsObserver {
-            NotificationCenter.default.removeObserver(easySwitchSettingsObserver)
-        }
         if let selectionAssistantSettingsObserver {
             NotificationCenter.default.removeObserver(selectionAssistantSettingsObserver)
         }
@@ -53,7 +46,6 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
         }
         primaryInteractionRetryTask?.cancel()
         launchWarmupTask?.cancel()
-        easySwitch.stop()
     }
 
     /// Call only from `NSApplicationDelegate.applicationDidFinishLaunching`.
@@ -64,9 +56,9 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
     }
 
     func start() {
+        removeObsoleteTextoraDiagnostics()
         AccessibilityPermissionMonitor.shared.start()
         installAccessibilityPermissionObserverIfNeeded()
-        installEasySwitchSettingsObserverIfNeeded()
         installSelectionAssistantSettingsObserverIfNeeded()
         rewritePanel.onHoverChanged = { [weak self] hovering in
             self?.handleRewritePopupHoverChanged(hovering)
@@ -93,6 +85,10 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
         selectionAssistant.onConsentRequired = { [weak self] anchor, bundleID in
             self?.handleSelectionAssistantConsentRequired(anchor: anchor, bundleID: bundleID)
         }
+        GlobalHotKeyManager.shared.onAction = { [weak self] action in
+            self?.handleGlobalHotKey(action)
+        }
+        GlobalHotKeyManager.shared.reload()
         if floatingHelper == nil {
             floatingHelper = FloatingHelperController(
                 onRewriteTap: { [weak self] frame in
@@ -132,8 +128,13 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
 
         KeychainHelper.migrateIfNeeded()
         KeychainHelper.warmUpCache()
-        configureEasySwitch(forceRestart: false)
         scheduleLaunchWarmupRetry(reason: "launch")
+        if !UserDefaults.standard.bool(forKey: Self.onboardingCompletedKey) {
+            shouldOpenAccessibilityAfterOnboarding = true
+            configurePrimaryInteractionMode()
+            showOnboardingWindow()
+            return
+        }
         if !hasAnyConfiguredKey() {
             shouldOpenAccessibilityAfterOnboarding = true
             configurePrimaryInteractionMode()
@@ -142,33 +143,14 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
             return
         }
         if !textAccess.hasAccessibilityPermission() {
-            configureEasySwitch(forceRestart: false)
             configurePrimaryInteractionMode()
             schedulePrimaryInteractionRetry(reason: "accessibilityUnavailable")
             showAccessibilityWizardDeferred()
             return
         }
-        configureEasySwitch(forceRestart: false)
         configurePrimaryInteractionMode()
         schedulePrimaryInteractionRetry(reason: "launchWarmup")
         showOnboardingIfNeededOnLaunch()
-    }
-
-    private func installEasySwitchSettingsObserverIfNeeded() {
-        guard easySwitchSettingsObserver == nil else { return }
-        easySwitchSettingsObserver = NotificationCenter.default.addObserver(
-            forName: EasySwitchManager.settingsDidChangeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.configureEasySwitch(forceRestart: false)
-            }
-        }
-    }
-
-    func applyEasySwitchSettingsNow(forceRestart: Bool = false) {
-        configureEasySwitch(forceRestart: forceRestart)
     }
 
     private func installSelectionAssistantSettingsObserverIfNeeded() {
@@ -206,8 +188,6 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
             KeychainHelper.migrateIfNeeded()
             KeychainHelper.warmUpCache()
             cancelPrimaryInteractionRetry()
-            cancelEasySwitchStartRetry()
-            configureEasySwitch(forceRestart: false)
             configurePrimaryInteractionMode()
             scheduleLaunchWarmupRetry(reason: "accessibilityGranted")
             showOnboardingIfNeededOnLaunch(afterAccessibility: true)
@@ -216,10 +196,8 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
             floatingHelper?.stop()
             rewritePanel.hide()
             consentPrompt.hide()
-            easySwitch.stop()
             helperStatus = "Accessibility disabled"
             schedulePrimaryInteractionRetry(reason: "accessibilityRevoked")
-            scheduleEasySwitchStartRetry(reason: "accessibilityRevoked")
         }
         settingsViewModel?.refreshAccessibilityPermissionStatus()
         onboardingViewModel?.refreshAccessibilityPermissionStatus()
@@ -251,24 +229,39 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
         consentPrompt.hide()
         floatingHelper?.setKeepBelowWindow(nil)
 
-        guard hasAnyConfiguredKey(), textAccess.hasAccessibilityPermission() else {
-            helperStatus = "Waiting for setup"
+        GlobalHotKeyManager.shared.reload()
+        guard hasAnyConfiguredKey() else {
+            helperStatus = "API key required"
+            selectionAssistant.stop()
+            floatingHelper?.stop()
+            return
+        }
+        guard textAccess.hasAccessibilityPermission() else {
+            helperStatus = "Waiting for Accessibility permission"
             selectionAssistant.stop()
             floatingHelper?.stop()
             return
         }
         cancelPrimaryInteractionRetry()
 
-        if isToolboxEnabled {
-            selectionAssistant.start()
+        let automatic = SelectionAssistantSettings.activationMode() == .automatic
+        let hasEnabledHotKey = SelectionAssistantSettings.hotKey(for: .rewrite).isEnabled
+            || SelectionAssistantSettings.hotKey(for: .translate).isEnabled
+        if (isToolboxEnabled && automatic) || hasEnabledHotKey {
+            selectionAssistant.start(automaticDetectionEnabled: isToolboxEnabled && automatic)
         } else {
             selectionAssistant.stop()
         }
 
-        if isFloatingIconEnabled {
+        if isFloatingIconEnabled && automatic {
             floatingHelper?.start()
         } else {
             floatingHelper?.stop()
+        }
+
+        if !automatic, hasEnabledHotKey {
+            helperStatus = "Hotkeys active"
+            return
         }
 
         switch (isToolboxEnabled, isFloatingIconEnabled) {
@@ -283,11 +276,28 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
         }
     }
 
-    func warmEasySwitchIfPossible() {
-        configureEasySwitch(forceRestart: false)
+    private func handleGlobalHotKey(_ action: TextoraHotKeyAction) {
+        guard hasAnyConfiguredKey() else {
+            showOnboardingWindow()
+            return
+        }
+        guard textAccess.hasAccessibilityPermission() else {
+            showAccessibilityWizardDeferred()
+            return
+        }
+        selectionAssistant.performHotKeyAction(action)
+    }
+
+    func warmPrimaryInteractionsIfPossible() {
         configurePrimaryInteractionMode()
         schedulePrimaryInteractionRetry(reason: "activationWarmup")
         scheduleLaunchWarmupRetry(reason: "activationWarmup")
+    }
+
+    func prepareForTermination() {
+        settingsViewModel?.flushPendingSave()
+        onboardingViewModel?.flushPendingSave()
+        GlobalHotKeyManager.shared.stop()
     }
 
     private func scheduleLaunchWarmupRetry(reason: String) {
@@ -309,7 +319,6 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.launchWarmupTask = nil
-                self.configureEasySwitch(forceRestart: false)
                 self.configurePrimaryInteractionMode()
                 if self.shouldContinueLaunchWarmup {
                     self.scheduleLaunchWarmupRetry(reason: reason)
@@ -375,66 +384,7 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
         primaryInteractionRetryCount = 0
     }
 
-    private func logSelectionAssistantDiagnostic(_ message: String) {
-        guard SelectionAssistantSettings.diagnosticsEnabled() else { return }
-        textoraDiagLog("selectionAssistant", message)
-    }
-
-    private func configureEasySwitch(forceRestart: Bool) {
-        EasySwitchSettings.registerDefaults()
-        easySwitch.reloadSettings()
-        guard textAccess.hasAccessibilityPermission() else {
-            if easySwitch.isRunning {
-                easySwitch.stop()
-            }
-            scheduleEasySwitchStartRetry(reason: "accessibilityUnavailable")
-            return
-        }
-        if forceRestart {
-            cancelEasySwitchStartRetry()
-            easySwitch.stop()
-        }
-
-        guard !easySwitch.isRunning else {
-            cancelEasySwitchStartRetry()
-            return
-        }
-
-        if easySwitch.start() {
-            cancelEasySwitchStartRetry()
-        } else {
-            scheduleEasySwitchStartRetry(reason: "startFailed")
-        }
-    }
-
-    private func scheduleEasySwitchStartRetry(reason: String) {
-        guard easySwitchStartRetryTask == nil else { return }
-        guard easySwitchStartRetryCount < 12 else {
-            textoraDiagLog("easySwitch", "start retry abandoned attempts=\(easySwitchStartRetryCount) reason=\(reason)")
-            return
-        }
-        easySwitchStartRetryCount += 1
-        let retryDelays: [TimeInterval] = [0.05, 0.10, 0.20, 0.35, 0.50, 0.75, 1.0, 1.0, 1.5, 2.0, 3.0, 5.0]
-        let delay = retryDelays[min(easySwitchStartRetryCount - 1, retryDelays.count - 1)]
-        let task = DispatchWorkItem { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.easySwitchStartRetryTask = nil
-                self?.configureEasySwitch(forceRestart: false)
-            }
-        }
-        easySwitchStartRetryTask = task
-        textoraDiagLog(
-            "easySwitch",
-            "start retry scheduled attempt=\(easySwitchStartRetryCount) delay=\(String(format: "%.2f", delay)) reason=\(reason)"
-        )
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: task)
-    }
-
-    private func cancelEasySwitchStartRetry() {
-        easySwitchStartRetryTask?.cancel()
-        easySwitchStartRetryTask = nil
-        easySwitchStartRetryCount = 0
-    }
+    private func logSelectionAssistantDiagnostic(_ message: @autoclosure () -> String) {}
 
     /// One run-loop cycle + short delay so MenuBarExtra and LSUIElement finish activation.
     private func showAccessibilityWizardDeferred() {
@@ -445,10 +395,14 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
 
     private func showAccessibilityWizard() {
         guard accessibilityWizardWindow == nil else { return }
-        let content = AccessibilityWizardView {
-            self.textAccess.openAccessibilityPermissionSettings()
-            self.dismissAccessibilityWizard()
-        }
+        let content = AccessibilityWizardView(
+            onRequestAccessibility: { [weak self] in
+                self?.textAccess.openAccessibilityPermissionSettings()
+            },
+            onOpenSettings: { [weak self] in
+                self?.textAccess.openAccessibilitySettingsWithoutPrompt()
+            }
+        )
         let hosting = NSHostingView(rootView: content)
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 420, height: 460),
@@ -476,22 +430,11 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
         }
     }
 
-    private func dismissAccessibilityWizard() {
-        accessibilityWizardWindow?.close()
-        accessibilityWizardWindow = nil
-        KeychainHelper.migrateIfNeeded()
-        KeychainHelper.warmUpCache()
-        configureEasySwitch(forceRestart: false)
-        configurePrimaryInteractionMode()
-        showOnboardingIfNeededOnLaunch(afterAccessibility: true)
-    }
-
     func windowWillClose(_ notification: Notification) {
         if (notification.object as? NSWindow) === accessibilityWizardWindow {
             accessibilityWizardWindow = nil
             KeychainHelper.migrateIfNeeded()
             KeychainHelper.warmUpCache()
-            configureEasySwitch(forceRestart: false)
             configurePrimaryInteractionMode()
             showOnboardingIfNeededOnLaunch(afterAccessibility: true)
             return
@@ -742,20 +685,19 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
                 },
                 onFinish: { [weak self] in
                     guard let self else { return }
-                    self.onboardingViewModel?.completeOnboarding()
+                    guard self.onboardingViewModel?.completeOnboarding() == true else { return }
                     self.closeOnboardingWindow()
                     if self.shouldOpenAccessibilityAfterOnboarding || !self.textAccess.hasAccessibilityPermission() {
                         self.shouldOpenAccessibilityAfterOnboarding = false
                         self.showAccessibilityWizardDeferred()
                     } else {
-                        self.configureEasySwitch(forceRestart: false)
                         self.configurePrimaryInteractionMode()
                     }
                 }
             )
             let hosting = NSHostingView(rootView: root)
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 500, height: 470),
+                contentRect: NSRect(x: 0, y: 0, width: 560, height: 540),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false

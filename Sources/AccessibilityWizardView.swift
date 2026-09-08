@@ -4,7 +4,8 @@ import AppKit
 // MARK: - Accessibility Wizard (branded pop-up when AX permission is missing)
 
 struct AccessibilityWizardView: View {
-    let onOpenAccessibility: () -> Void
+    let onRequestAccessibility: () -> Void
+    let onOpenSettings: () -> Void
 
     private static let titleFont = Font.system(size: 22, weight: .semibold, design: .rounded)
     private static let bodyFont = Font.system(size: 14, weight: .regular, design: .default)
@@ -29,11 +30,14 @@ struct AccessibilityWizardView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack {
+                Button("Open Settings Directly") {
+                    onOpenSettings()
+                }
                 Spacer()
                 Button {
-                    onOpenAccessibility()
+                    onRequestAccessibility()
                 } label: {
-                    Text("Open Accessibility Settings")
+                    Text("Request Access")
                         .font(Self.buttonFont)
                         .foregroundStyle(.white)
                         .padding(.horizontal, 18)
