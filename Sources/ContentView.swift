@@ -392,6 +392,7 @@ private struct InterfaceModeCard: View {
     let accent: Color
     let preview: PreviewKind
     var compact = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Button {
@@ -401,17 +402,17 @@ private struct InterfaceModeCard: View {
                 HStack(spacing: 8) {
                     Text(title)
                         .font(.system(size: compact ? 12.5 : 14, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                     Spacer()
                     Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: compact ? 15 : 17, weight: .semibold))
-                        .foregroundStyle(isOn ? accent : Color.white.opacity(0.38))
+                        .foregroundStyle(isOn ? accent : Color.secondary.opacity(0.7))
                 }
                 modePreview
                     .frame(height: compact ? 54 : 72)
                 Text(subtitle)
                     .font(.system(size: compact ? 10.5 : 12, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.62))
+                    .foregroundStyle(.secondary)
                     .lineLimit(compact ? 2 : 3)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -422,6 +423,7 @@ private struct InterfaceModeCard: View {
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
+        .focusEffectDisabled()
     }
 
     @ViewBuilder
@@ -441,8 +443,10 @@ private struct InterfaceModeCard: View {
             .fill(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(isOn ? 0.11 : 0.055),
-                        accent.opacity(isOn ? 0.16 : 0.035)
+                        colorScheme == .dark
+                            ? Color.white.opacity(isOn ? 0.11 : 0.055)
+                            : Color.black.opacity(isOn ? 0.055 : 0.025),
+                        accent.opacity(isOn ? (colorScheme == .dark ? 0.16 : 0.11) : 0.035)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -452,7 +456,12 @@ private struct InterfaceModeCard: View {
 
     private var cardStroke: some View {
         RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .stroke(isOn ? accent.opacity(0.55) : Color.white.opacity(0.12), lineWidth: 1)
+            .stroke(
+                isOn
+                    ? accent.opacity(colorScheme == .dark ? 0.55 : 0.72)
+                    : Color(nsColor: .separatorColor).opacity(0.8),
+                lineWidth: 1
+            )
     }
 
     private var toolboxPreview: some View {
@@ -604,12 +613,9 @@ struct OnboardingView: View {
     let onClose: () -> Void
     let onOpenSettings: () -> Void
     let onFinish: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
     
     private enum Theme {
-        static let bg = Color(red: 26 / 255, green: 26 / 255, blue: 30 / 255)
-        static let cardBg = Color(red: 22 / 255, green: 22 / 255, blue: 26 / 255)
-        static let border = Color.white.opacity(0.12)
-        static let muted = Color.white.opacity(0.65)
         static let accentStart = Color(red: 62 / 255, green: 123 / 255, blue: 1)
         static let accentEnd = Color(red: 151 / 255, green: 71 / 255, blue: 1)
         static let success = Color(red: 40 / 255, green: 205 / 255, blue: 65 / 255)
@@ -623,14 +629,14 @@ struct OnboardingView: View {
             case 1:
                 Text("Textora helps you fix and improve text in any app, including email, chats, documents, and browsers.")
                     .font(.system(size: 14))
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(.secondary)
                 Text("Before you start, add your API key. The setup wizard will guide you step by step.")
                     .font(.system(size: 14))
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(.secondary)
             case 2:
                 Text("Choose an AI provider and add your key. GPT is selected by default.")
                     .font(.system(size: 14))
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(.secondary)
                 Picker("Provider", selection: $viewModel.provider) {
                     ForEach(AIProvider.allCases) { provider in
                         Text(provider.displayName).tag(provider)
@@ -640,7 +646,7 @@ struct OnboardingView: View {
             case 3:
                 Text("Add your key and verify the connection.")
                     .font(.system(size: 14))
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(.secondary)
                 onboardingCredentialFields
                 if !viewModel.onboardingErrorText.isEmpty {
                     Text(viewModel.onboardingErrorText)
@@ -650,10 +656,10 @@ struct OnboardingView: View {
             case 4:
                 Text("Choose how Textora should appear when you write.")
                     .font(.system(size: 14))
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(.secondary)
                 Text("Choose Toolbox, the classic Floating icon, or run Textora only with keyboard shortcuts.")
                     .font(.system(size: 13))
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(.secondary)
                 InterfaceModeCards(
                     toolboxEnabled: onboardingModeBinding(.toolbox),
                     floatingIconEnabled: onboardingModeBinding(.floatingIcon),
@@ -664,12 +670,12 @@ struct OnboardingView: View {
                     VStack(alignment: .leading, spacing: 7) {
                         Text("Choose your shortcuts")
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.primary)
                         HotKeySettingRow(title: "Rewrite selected text", hotKey: $viewModel.rewriteHotKey)
                         HotKeySettingRow(title: "Translate selected text", hotKey: $viewModel.translateHotKey)
                         Text("Suggested: ⌥⌘R for Rewrite and ⌥⌘T for Translate")
                             .font(.caption2)
-                            .foregroundStyle(Theme.muted)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 if !viewModel.hasValidOnboardingInterfaceSelection {
@@ -680,9 +686,10 @@ struct OnboardingView: View {
             default:
                 Text("Done. Next, Accessibility will open to complete setup.")
                     .font(.system(size: 14))
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(.secondary)
             }
 
+            Spacer(minLength: 0)
             Divider()
 
             HStack(spacing: 8) {
@@ -696,6 +703,7 @@ struct OnboardingView: View {
                         viewModel.moveOnboardingNext()
                     }
                     .buttonStyle(PrimaryButtonStyle())
+                    .focusEffectDisabled()
                 } else if viewModel.onboardingStep == 3 {
                     Button(viewModel.isOnboardingBusy ? "Connecting..." : "Continue") {
                         Task {
@@ -707,21 +715,25 @@ struct OnboardingView: View {
                     }
                     .disabled(viewModel.isOnboardingBusy)
                     .buttonStyle(PrimaryButtonStyle())
+                    .focusEffectDisabled()
                 } else if viewModel.onboardingStep == 4 {
                     Button("Continue") {
                         viewModel.moveOnboardingNext()
                     }
                     .disabled(!viewModel.hasValidOnboardingInterfaceSelection)
                     .buttonStyle(PrimaryButtonStyle())
+                    .focusEffectDisabled()
                 } else {
                     Button("Finish") {
                         onFinish()
                     }
                     .buttonStyle(SuccessButtonStyle())
+                    .focusEffectDisabled()
                     Button("Open advanced settings") {
                         onOpenSettings()
                     }
                     .buttonStyle(SecondaryButtonStyle())
+                    .focusEffectDisabled()
                 }
                 Spacer()
                 if viewModel.onboardingStep < 5 {
@@ -729,14 +741,13 @@ struct OnboardingView: View {
                         viewModel.skipOnboardingForNow()
                         onClose()
                     }
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(.secondary)
                 }
             }
         }
         .padding(16)
-        .frame(width: 560, height: 540)
+        .frame(width: 560, height: 540, alignment: .topLeading)
         .background(popupBackground)
-        .preferredColorScheme(.dark)
     }
 
     private func onboardingModeBinding(_ mode: AppViewModel.OnboardingInterfaceMode) -> Binding<Bool> {
@@ -758,10 +769,10 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Textora Quick setup")
                     .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                 Text("Step \(viewModel.onboardingStep) of 5")
                     .font(.caption)
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
             stepBadge
@@ -769,10 +780,10 @@ struct OnboardingView: View {
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Theme.cardBg)
+                .fill(Color(nsColor: .controlBackgroundColor))
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Theme.border, lineWidth: 1)
+                        .stroke(Color(nsColor: .separatorColor).opacity(0.8), lineWidth: 1)
                 )
         )
     }
@@ -796,14 +807,14 @@ struct OnboardingView: View {
     private var popupBackground: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Theme.bg.opacity(0.92))
+                .fill(Color(nsColor: .windowBackgroundColor))
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(.ultraThinMaterial)
-                .opacity(0.55)
+                .opacity(colorScheme == .dark ? 0.38 : 0.16)
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Theme.border, lineWidth: 1)
+                .stroke(Color(nsColor: .separatorColor).opacity(0.8), lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.45), radius: 22, x: 0, y: 12)
+        .shadow(color: .black.opacity(colorScheme == .dark ? 0.42 : 0.18), radius: 22, x: 0, y: 12)
     }
 
     @ViewBuilder
@@ -811,11 +822,11 @@ struct OnboardingView: View {
         if viewModel.provider == .other {
             Text("1. Add API details")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
         } else {
             Text("1. Paste your API key")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
         }
 
         switch viewModel.provider {
@@ -853,14 +864,14 @@ struct OnboardingView: View {
         if viewModel.provider == .other {
             Text("2. Enter the model name")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
             TextField("Model", text: $viewModel.model)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .textFieldStyle(.roundedBorder)
         } else {
             Text("2. Check available models")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
 
             HStack(spacing: 10) {
                 Button {
@@ -873,6 +884,7 @@ struct OnboardingView: View {
                 }
                 .disabled(viewModel.isLoadingModels || !viewModel.hasCurrentProviderAPIKey)
                 .buttonStyle(SecondaryButtonStyle())
+                .focusEffectDisabled()
 
                 if viewModel.isLoadingModels {
                     ProgressView()
@@ -887,12 +899,12 @@ struct OnboardingView: View {
             if !viewModel.modelCatalogError.isEmpty {
                 Text(viewModel.modelCatalogError)
                     .font(.caption2)
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(.secondary)
             }
 
             Text("3. Choose a model")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
             Picker("Model", selection: $viewModel.model) {
                 Text("Auto (\(viewModel.recommendedModel))").tag("")
                 ForEach(viewModel.modelPickerOptions) { option in
@@ -924,6 +936,7 @@ private struct PrimaryButtonStyle: ButtonStyle {
                 .opacity(configuration.isPressed ? 0.88 : 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .focusEffectDisabled()
     }
 }
 
@@ -939,21 +952,31 @@ private struct SuccessButtonStyle: ButtonStyle {
                     .opacity(configuration.isPressed ? 0.85 : 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .focusEffectDisabled()
     }
 }
 
 private struct SecondaryButtonStyle: ButtonStyle {
+    @Environment(\.colorScheme) private var colorScheme
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(.primary)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color.white.opacity(configuration.isPressed ? 0.10 : 0.14))
+            .background(
+                Color.primary.opacity(
+                    configuration.isPressed
+                        ? (colorScheme == .dark ? 0.10 : 0.08)
+                        : (colorScheme == .dark ? 0.14 : 0.055)
+                )
+            )
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                    .stroke(Color(nsColor: .separatorColor).opacity(0.9), lineWidth: 1)
             )
+            .focusEffectDisabled()
     }
 }
