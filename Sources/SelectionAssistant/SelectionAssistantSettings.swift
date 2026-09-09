@@ -276,7 +276,11 @@ final class GlobalHotKeyManager {
                 event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
                 nil, MemoryLayout<EventHotKeyID>.size, nil, &id
             )
-            guard status == noErr, let action = TextoraHotKeyAction(rawValue: id.id) else { return status }
+            guard status == noErr,
+                  id.signature == OSType(0x54585452),
+                  let action = TextoraHotKeyAction(rawValue: id.id) else {
+                return OSStatus(eventNotHandledErr)
+            }
             Task { @MainActor in GlobalHotKeyManager.shared.onAction?(action) }
             return noErr
         }, 1, &eventType, nil, &handler)

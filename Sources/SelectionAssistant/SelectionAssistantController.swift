@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Combine
 import SwiftUI
 
@@ -33,6 +34,8 @@ final class SelectionAssistantController: NSObject, NSWindowDelegate {
     private var eventMonitorTokens: [Any] = []
     private var commandAEventTap: CFMachPort?
     private var commandAEventTapSource: CFRunLoopSource?
+    private var returnHotKeyHandler: EventHandlerRef?
+    private var returnHotKeyRegistrations: [EventHotKeyRef] = []
     private var viewModelCancellable: AnyCancellable?
     private var automaticDetectionEnabled = true
     private var isProgrammaticallyMovingPanel = false
@@ -47,6 +50,7 @@ final class SelectionAssistantController: NSObject, NSWindowDelegate {
     private static let transientSelectionLossGrace: TimeInterval = 0.65
     private static let hotKeyPanelOriginXKey = "hotkey.panel.originX"
     private static let hotKeyPanelOriginYKey = "hotkey.panel.originY"
+    private static let returnHotKeySignature = OSType(0x54585245) // TXRE
 
     private enum PanelPlacementSide {
         case above
@@ -96,7 +100,8 @@ final class SelectionAssistantController: NSObject, NSWindowDelegate {
         selectionGestureID += 1
         lastTraceSignature = nil
         viewModel.clear()
-        panel?.orderOut(nil)
+        hidePanel()
+        removeReturnHotKeyHandler()
     }
 
     func resolvePendingHotKeyConsent(for bundleID: String, allowed: Bool) {
@@ -130,7 +135,7 @@ final class SelectionAssistantController: NSObject, NSWindowDelegate {
         pendingConsentKey = nil
         pendingSelectionKey = nil
         pendingWeakSelectionRangeSignature = nil
-        panel?.orderOut(nil)
+        hidePanel()
     }
 
     private func tick() {
@@ -268,7 +273,7 @@ final class SelectionAssistantController: NSObject, NSWindowDelegate {
         suppressSelectionUntil = .distantPast
         transientSelectionLossGraceUntil = .distantPast
         viewModel.clear()
-        panel?.orderOut(nil)
+        hidePanel()
         trace("hide no selection")
     }
 
@@ -287,7 +292,7 @@ final class SelectionAssistantController: NSObject, NSWindowDelegate {
         lockedPanelPlacementSide = nil
         transientSelectionLossGraceUntil = .distantPast
         viewModel.clear()
-        panel?.orderOut(nil)
+        hidePanel()
 
         if let suppressConsentPromptUntil, suppressConsentPromptUntil > Date() {
             return
@@ -637,7 +642,7 @@ final class SelectionAssistantController: NSObject, NSWindowDelegate {
         lockedPanelPlacementSide = nil
         transientSelectionLossGraceUntil = .distantPast
         viewModel.clear()
-        panel?.orderOut(nil)
+        hidePanel()
         trace("suppress copy")
     }
 
@@ -654,7 +659,7 @@ final class SelectionAssistantController: NSObject, NSWindowDelegate {
         lockedPanelPlacementSide = nil
         transientSelectionLossGraceUntil = .distantPast
         viewModel.clear()
-        panel?.orderOut(nil)
+        hidePanel()
         trace("suppress context menu")
     }
 
@@ -721,8 +726,7 @@ final class SelectionAssistantController: NSObject, NSWindowDelegate {
         let root = SelectionToolbarView(
             viewModel: viewModel,
             onApply: { [weak self] in
-                guard let self else { return }
-                self.viewModel.apply { [weak self] in self?.panel?.orderOut(nil) }
+                self?.applyCurrentRewrite()
             },
             onTranslationCopied: { [weak self] in
                 self?.hideForNoSelection()
@@ -756,6 +760,7 @@ final class SelectionAssistantController: NSObject, NSWindowDelegate {
         viewModelCancellable = viewModel.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async { [weak self] in
                 self?.resizeVisiblePanelForModelChange()
+                self?.updateReturnHotKeyRegistration()
             }
         }
     }
@@ -787,6 +792,97 @@ final class SelectionAssistantController: NSObject, NSWindowDelegate {
             panel.alphaValue = 1
             panel.orderFrontRegardless()
         }
+        updateReturnHotKeyRegistration()
+    }
+
+    private func applyCurrentRewrite() {
+        guard viewModel.canApply else { return }
+        unregisterReturnHotKeys()
+        viewModel.apply { [weak self] in self?.hidePanel() }
+    }
+
+    private func hidePanel() {
+        unregisterReturnHotKeys()
+        panel?.orderOut(nil)
+    }
+
+    private func updateReturnHotKeyRegistration() {
+        let shouldRegister = panel?.isVisible == true
+            && viewModel.presentationMode == .hotKeyRewrite
+            && viewModel.canApply
+        guard shouldRegister else {
+            unregisterReturnHotKeys()
+            return
+        }
+        guard returnHotKeyRegistrations.isEmpty else { return }
+        installReturnHotKeyHandlerIfNeeded()
+        for (id, keyCode) in [(UInt32(1), UInt32(36)), (UInt32(2), UInt32(76))] {
+            var registration: EventHotKeyRef?
+            let status = RegisterEventHotKey(
+                keyCode,
+                0,
+                EventHotKeyID(signature: Self.returnHotKeySignature, id: id),
+                GetApplicationEventTarget(),
+                0,
+                &registration
+            )
+            if status == noErr, let registration {
+                returnHotKeyRegistrations.append(registration)
+            }
+        }
+    }
+
+    private func installReturnHotKeyHandlerIfNeeded() {
+        guard returnHotKeyHandler == nil else { return }
+        var eventType = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        InstallEventHandler(
+            GetApplicationEventTarget(),
+            { _, event, refcon in
+                guard let event, let refcon else { return OSStatus(eventNotHandledErr) }
+                var hotKeyID = EventHotKeyID()
+                let status = GetEventParameter(
+                    event,
+                    EventParamName(kEventParamDirectObject),
+                    EventParamType(typeEventHotKeyID),
+                    nil,
+                    MemoryLayout<EventHotKeyID>.size,
+                    nil,
+                    &hotKeyID
+                )
+                guard status == noErr,
+                      hotKeyID.signature == SelectionAssistantController.returnHotKeySignature else {
+                    return OSStatus(eventNotHandledErr)
+                }
+                let controller = Unmanaged<SelectionAssistantController>
+                    .fromOpaque(refcon)
+                    .takeUnretainedValue()
+                Task { @MainActor in
+                    controller.applyCurrentRewrite()
+                }
+                return noErr
+            },
+            1,
+            &eventType,
+            refcon,
+            &returnHotKeyHandler
+        )
+    }
+
+    private func unregisterReturnHotKeys() {
+        returnHotKeyRegistrations.forEach { UnregisterEventHotKey($0) }
+        returnHotKeyRegistrations.removeAll()
+    }
+
+    private func removeReturnHotKeyHandler() {
+        unregisterReturnHotKeys()
+        if let returnHotKeyHandler {
+            RemoveEventHandler(returnHotKeyHandler)
+        }
+        returnHotKeyHandler = nil
     }
 
     func windowDidMove(_ notification: Notification) {

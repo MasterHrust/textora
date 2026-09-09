@@ -397,7 +397,7 @@ struct SelectionToolbarView: View {
                 .frame(width: 154, height: 42)
             } else {
                 Button(action: onApply) {
-                    hotKeyActionLabel("Apply", systemImage: "checkmark")
+                    hotKeyActionLabel("Apply", systemImage: "checkmark", shortcut: "↵")
                 }
                 .disabled(!viewModel.canApply)
                 .buttonStyle(.plain)
@@ -409,8 +409,15 @@ struct SelectionToolbarView: View {
         .frame(height: 42)
     }
 
-    private func hotKeyActionLabel(_ title: String, systemImage: String) -> some View {
-        Label(title, systemImage: systemImage)
+    private func hotKeyActionLabel(_ title: String, systemImage: String, shortcut: String? = nil) -> some View {
+        HStack(spacing: 8) {
+            Label(title, systemImage: systemImage)
+            if let shortcut {
+                Text(shortcut)
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+        }
             .font(.system(size: 14, weight: .heavy))
             .foregroundStyle(.white.opacity(hotKeyActionEnabled ? 1 : 0.48))
             .frame(maxWidth: .infinity, minHeight: 42, maxHeight: 42)
