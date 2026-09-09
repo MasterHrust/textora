@@ -393,28 +393,17 @@ final class AppViewModel: ObservableObject {
     }
 
     func setInterfaceMode(_ mode: OnboardingInterfaceMode, enabled: Bool) {
+        guard enabled else { return }
         switch mode {
         case .toolbox:
-            if enabled {
-                updateInterfaceModes(toolbox: true, floatingIcon: false, hotKeys: hotKeysModeEnabled)
-            } else if floatingIconEnabled || hotKeysModeEnabled {
-                updateInterfaceModes(toolbox: false, floatingIcon: floatingIconEnabled, hotKeys: hotKeysModeEnabled)
-            }
+            updateInterfaceModes(toolbox: true, floatingIcon: false, hotKeys: false)
         case .floatingIcon:
-            if enabled {
-                updateInterfaceModes(toolbox: false, floatingIcon: true, hotKeys: hotKeysModeEnabled)
-            } else if toolboxEnabled || hotKeysModeEnabled {
-                updateInterfaceModes(toolbox: toolboxEnabled, floatingIcon: false, hotKeys: hotKeysModeEnabled)
-            }
+            updateInterfaceModes(toolbox: false, floatingIcon: true, hotKeys: false)
         case .hotKeys:
-            if enabled {
-                updateInterfaceModes(toolbox: toolboxEnabled, floatingIcon: floatingIconEnabled, hotKeys: true)
-                if !rewriteHotKey.isEnabled && !translateHotKey.isEnabled {
-                    rewriteHotKey.isEnabled = true
-                    translateHotKey.isEnabled = true
-                }
-            } else if toolboxEnabled || floatingIconEnabled {
-                updateInterfaceModes(toolbox: toolboxEnabled, floatingIcon: floatingIconEnabled, hotKeys: false)
+            updateInterfaceModes(toolbox: false, floatingIcon: false, hotKeys: true)
+            if !rewriteHotKey.isEnabled && !translateHotKey.isEnabled {
+                rewriteHotKey.isEnabled = true
+                translateHotKey.isEnabled = true
             }
         }
     }

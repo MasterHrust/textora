@@ -176,6 +176,7 @@ final class SecurityAndSettingsTests: XCTestCase {
         let suiteName = "TextoraTests.HotKeyModePersistence.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(false, forKey: SelectionAssistantSettings.Keys.toolboxEnabled)
         defaults.set(true, forKey: SelectionAssistantSettings.Keys.hotKeysModeEnabled)
 
         SelectionAssistantSettings.registerDefaults(defaults: defaults)
@@ -196,6 +197,25 @@ final class SecurityAndSettingsTests: XCTestCase {
 
         XCTAssertTrue(defaults.bool(forKey: SelectionAssistantSettings.Keys.toolboxEnabled))
         XCTAssertFalse(defaults.bool(forKey: SelectionAssistantSettings.Keys.floatingIconEnabled))
+        XCTAssertFalse(defaults.bool(forKey: SelectionAssistantSettings.Keys.hotKeysModeEnabled))
+    }
+
+    @MainActor
+    func testExclusiveInterfaceSelectionRejectsCombinations() throws {
+        let suiteName = "TextoraTests.ExclusiveInterfaceMode.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        SelectionAssistantSettings.setInterfaceModes(
+            toolbox: false,
+            floatingIcon: true,
+            hotKeys: true,
+            defaults: defaults
+        )
+
+        XCTAssertFalse(defaults.bool(forKey: SelectionAssistantSettings.Keys.toolboxEnabled))
+        XCTAssertTrue(defaults.bool(forKey: SelectionAssistantSettings.Keys.floatingIconEnabled))
+        XCTAssertFalse(defaults.bool(forKey: SelectionAssistantSettings.Keys.hotKeysModeEnabled))
     }
 
     @MainActor
@@ -252,8 +272,12 @@ final class SecurityAndSettingsTests: XCTestCase {
             keys.translationLanguage,
             keys.operation,
             keys.activationMode,
+            keys.toolboxEnabled,
+            keys.floatingIconEnabled,
             keys.hotKeysModeEnabled,
             keys.hotKeysModeMigration,
+            keys.interfaceModeMigration,
+            keys.exclusiveInterfaceModeMigration,
             keys.rewriteHotKeyCode,
             keys.rewriteHotKeyModifiers,
             keys.rewriteHotKeyEnabled,

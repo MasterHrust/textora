@@ -107,7 +107,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Interface")
                 .font(.headline)
-            Text("Choose one visual interface, add Hotkeys to it, or use Hotkeys on their own.")
+            Text("Choose one way to use Textora. Toolbox, Floating icon, and Hotkeys cannot run together.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             InterfaceModeCards(

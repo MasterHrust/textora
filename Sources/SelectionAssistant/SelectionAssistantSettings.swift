@@ -48,6 +48,7 @@ enum SelectionAssistantSettings {
         static let hotKeysModeEnabled = "selectionAssistant.hotKeysMode.enabled"
         static let hotKeysModeMigration = "selectionAssistant.hotKeysMode.migration.v1"
         static let interfaceModeMigration = "selectionAssistant.interfaceMode.migration.v1"
+        static let exclusiveInterfaceModeMigration = "selectionAssistant.interfaceMode.migration.v2"
         static let operation = "selectionAssistant.operation"
         static let activationMode = "selectionAssistant.activationMode"
         static let translationLanguage = "translation.targetLanguage"
@@ -95,6 +96,23 @@ enum SelectionAssistantSettings {
                 defaults.set(true, forKey: Keys.toolboxEnabled)
             }
             defaults.set(true, forKey: Keys.interfaceModeMigration)
+        }
+        if !defaults.bool(forKey: Keys.exclusiveInterfaceModeMigration) {
+            let toolboxEnabled = defaults.bool(forKey: Keys.toolboxEnabled)
+            let floatingIconEnabled = defaults.bool(forKey: Keys.floatingIconEnabled)
+            let hotKeysEnabled = defaults.bool(forKey: Keys.hotKeysModeEnabled)
+            if legacyActivationMode == SelectionActivationMode.hotkeyOnly.rawValue, hotKeysEnabled {
+                persistInterfaceModes(toolbox: false, floatingIcon: false, hotKeys: true, defaults: defaults)
+            } else if toolboxEnabled {
+                persistInterfaceModes(toolbox: true, floatingIcon: false, hotKeys: false, defaults: defaults)
+            } else if floatingIconEnabled {
+                persistInterfaceModes(toolbox: false, floatingIcon: true, hotKeys: false, defaults: defaults)
+            } else if hotKeysEnabled {
+                persistInterfaceModes(toolbox: false, floatingIcon: false, hotKeys: true, defaults: defaults)
+            } else {
+                persistInterfaceModes(toolbox: true, floatingIcon: false, hotKeys: false, defaults: defaults)
+            }
+            defaults.set(true, forKey: Keys.exclusiveInterfaceModeMigration)
         }
         if !defaults.bool(forKey: Keys.rewriteHotKeyDefaultRMigration) {
             let isLegacyDefault = defaults.integer(forKey: Keys.rewriteHotKeyCode) == 7
@@ -182,11 +200,28 @@ enum SelectionAssistantSettings {
         hotKeys: Bool,
         defaults: UserDefaults = .standard
     ) {
+        if toolbox {
+            persistInterfaceModes(toolbox: true, floatingIcon: false, hotKeys: false, defaults: defaults)
+        } else if floatingIcon {
+            persistInterfaceModes(toolbox: false, floatingIcon: true, hotKeys: false, defaults: defaults)
+        } else if hotKeys {
+            persistInterfaceModes(toolbox: false, floatingIcon: false, hotKeys: true, defaults: defaults)
+        } else {
+            persistInterfaceModes(toolbox: true, floatingIcon: false, hotKeys: false, defaults: defaults)
+        }
+        defaults.set(true, forKey: Keys.enabled)
+        NotificationCenter.default.post(name: settingsDidChangeNotification, object: nil)
+    }
+
+    private static func persistInterfaceModes(
+        toolbox: Bool,
+        floatingIcon: Bool,
+        hotKeys: Bool,
+        defaults: UserDefaults
+    ) {
         defaults.set(toolbox, forKey: Keys.toolboxEnabled)
         defaults.set(floatingIcon, forKey: Keys.floatingIconEnabled)
         defaults.set(hotKeys, forKey: Keys.hotKeysModeEnabled)
-        defaults.set(true, forKey: Keys.enabled)
-        NotificationCenter.default.post(name: settingsDidChangeNotification, object: nil)
     }
 
     static func activationMode(defaults: UserDefaults = .standard) -> SelectionActivationMode {
