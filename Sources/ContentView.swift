@@ -203,12 +203,12 @@ struct ContentView: View {
                 .frame(width: 8, height: 8)
             Text(viewModel.hasAccessibilityPermission
                  ? "Accessibility granted"
-                 : "Accessibility is required for the selection toolbar and text replacement")
+                 : "Accessibility is required. If an old Textora entry is enabled, remove it and add the current app again.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
             if !viewModel.hasAccessibilityPermission {
-                Button("Allow Accessibility") {
+                Button("Open Accessibility") {
                     viewModel.requestAccessibilityPermission()
                 }
             } else {

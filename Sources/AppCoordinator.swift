@@ -398,23 +398,20 @@ final class AppCoordinator: NSObject, ObservableObject, NSWindowDelegate {
     private func showAccessibilityWizard() {
         guard accessibilityWizardWindow == nil else { return }
         let content = AccessibilityWizardView(
-            onRequestAccessibility: { [weak self] in
-                self?.textAccess.openAccessibilityPermissionSettings()
-            },
-            onOpenSettings: { [weak self] in
-                self?.textAccess.openAccessibilitySettingsWithoutPrompt()
+            onOpenAccessibility: { [weak self] in
+                self?.textAccess.openAccessibilitySettings()
             }
         )
         let hosting = NSHostingView(rootView: content)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 460),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 390),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
         window.title = "Textora"
         window.isReleasedWhenClosed = false
-        window.level = .floating
+        window.level = .normal
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.isMovableByWindowBackground = true
         window.contentView = hosting

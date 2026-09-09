@@ -420,16 +420,12 @@ final class TextAccessService {
         return trusted
     }
 
-    func requestAccessibilityPermissionIfNeeded() {
-        registerForAccessibilityPermission()
-    }
-
     @discardableResult
-    private func registerForAccessibilityPermission(prompt: Bool = true) -> Bool {
+    private func registerForAccessibilityPermission() -> Bool {
         registerRunningAppForSystemServices()
         touchAccessibilityAPIForTCCRegistration()
         let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        let options = [promptKey: prompt] as CFDictionary
+        let options = [promptKey: false] as CFDictionary
         let trusted = AXIsProcessTrustedWithOptions(options)
         touchAccessibilityAPIForTCCRegistration()
         Task { @MainActor in
@@ -488,28 +484,8 @@ final class TextAccessService {
         }
     }
 
-    func openAccessibilityPermissionSettings() {
-        let trusted = registerForAccessibilityPermission(prompt: true)
-        if trusted {
-            Task { @MainActor in
-                AccessibilityPermissionMonitor.shared.refreshNow()
-            }
-            return
-        }
-
-        // The system prompt owns the transition to System Settings. Opening the
-        // pane here as well leaves that prompt hidden behind Settings.
-        for delay in [0.25, 0.75, 1.5, 3.0] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                Task { @MainActor in
-                    AccessibilityPermissionMonitor.shared.refreshNow()
-                }
-            }
-        }
-    }
-
-    func openAccessibilitySettingsWithoutPrompt() {
-        _ = registerForAccessibilityPermission(prompt: false)
+    func openAccessibilitySettings() {
+        _ = registerForAccessibilityPermission()
         Self.openAccessibilitySettingsPane()
         Task { @MainActor in
             AccessibilityPermissionMonitor.shared.refreshNow()

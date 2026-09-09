@@ -605,7 +605,7 @@ final class AppViewModel: ObservableObject {
     }
 
     func requestAccessibilityPermission() {
-        textService.openAccessibilityPermissionSettings()
+        textService.openAccessibilitySettings()
         // Permission is granted outside the app; re-check after a short delay.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.refreshAccessibilityPermissionStatus()
